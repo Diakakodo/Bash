@@ -1,0 +1,12 @@
+cd
+prompt de la forme "USER@HOSTNAME:REPCOURANT$".USER
+&&
+||
+|
+<
+>
+>>
+interactif ou non interactif (pas de prompt)
+-e
+& (commande en arrière plan)
+-r
