@@ -1,0 +1,9 @@
+tesh-tester: # do not modify this test
+        image: debian:stretch
+        script:
+                - apt-get update && apt-get -y install wget
+                - wget -O - https://members.loria.fr/lnussbaum/RS/tesh-tester | bash
+
+your-own-test: # feel free to modify this test and add more
+        script:
+                - ls
