@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
-#define MAX_LENGTH_INSTRUCTION 128
+#define MAX_LENGTH_INSTRUCTION 256
 
 char* getInstruction(char* sentence) {
 	char* endOfLine = NULL;
@@ -10,20 +11,32 @@ char* getInstruction(char* sentence) {
 	if(fgets(sentence, MAX_LENGTH_INSTRUCTION, stdin) != NULL) {
 		endOfLine = strchr(sentence, '\n');
 
-		if(endOfLine != NULL) {
+		if(endOfLine != NULL)
 			*endOfLine = '\0';
-		}
 
 		return sentence;
 	} else return NULL;
 }
 
+void analyseInstruction(char* sentence, char* path) {
+	if(!strcmp(sentence, "cd")) {
+    	printf("chbj %s \n", getInstruction(sentence));
+	}
+
+	sentence = "";
+}
+
 int main() {
-    printf("Hello, world!\n");
 	char sentence[MAX_LENGTH_INSTRUCTION];
+	char path[256];
+    getcwd(path, 256);
 
     while(1) {
-    	printf("%s", getInstruction(sentence));
+    	printf("%s \n", getInstruction(sentence));
+
+    	if(strcmp(sentence, ""))
+    		analyseInstruction(sentence, path);
     }
+
     return 0;
 }
