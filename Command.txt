@@ -1,5 +1,5 @@
 cd
-prompt de la forme "USER@HOSTNAME:REPCOURANT$".USER
+prompt de la forme "USER@HOSTNAME:REPCOURANT$"
 &&
 ||
 |

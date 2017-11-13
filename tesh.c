@@ -19,8 +19,10 @@ char* getInstruction(char* sentence) {
 }
 
 void analyseInstruction(char* sentence, char* path) {
+	char** tabSentence = parseSentence(sentence);
+
 	if(!strcmp(sentence, "cd")) {
-    	printf("chbj %s \n", getInstruction(sentence));
+    	printf("chbj");
 	}
 
 	sentence = "";
