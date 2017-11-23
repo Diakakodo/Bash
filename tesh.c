@@ -8,6 +8,58 @@
 #define MAX_INSTRUCTION_LENGTH 256
 #define MAX_HOST_LENGTH 64
 #define MAX_PATH_LENGTH 128
+#define BUFSIZE 256
+
+// Renvoie la longueur d'une chaîne de caractères
+int string_length(char* string) {
+
+	int length = 0;
+
+	while (string[length] != '\0') {
+		length++;
+	}
+
+	return length;
+}
+
+// On met les commandes et arguments dans un tableau
+char** parseSentence(char* sentence) {
+
+	int length = string_length(sentence);
+	char** tabSentence = (char**) malloc((length/2)*sizeof(char*));
+	const char delimiter[2] = " ";
+	char* word;
+	int count = 0;
+
+	word = strtok(sentence, delimiter);
+
+	while (word != NULL) {
+		tabSentence[count] = word;
+		count++;
+		word = strtok(NULL, delimiter);
+	}
+
+	//Affichage pour test
+	printf("Tableau final :\n");
+
+	for (int i=0; i<count; i++) {
+		printf( "%s\n", tabSentence[i]);
+	}
+
+	return tabSentence;
+}
+
+void analyseInstruction(char* sentence, char* path) {
+	char** tabSentence = parseSentence(sentence);
+
+	printf("Test test\n");
+
+	if(!strcmp(sentence, "cd")) {
+
+	}
+
+	sentence = "";
+}
 
 char* getInstruction(char* sentence) {
 	char* endOfLine = NULL;
@@ -20,18 +72,11 @@ char* getInstruction(char* sentence) {
 
 		return sentence;
 	} else return NULL;
+
+	analyseInstruction(sentence, "");
 }
 
-void analyseInstruction(char* sentence, char* path) {
-	//char** tabSentence = parseSentence(sentence);
-
-	if(!strcmp(sentence, "cd")) {
-
-	}
-
-	sentence = "";
-}
-
+/*
 // >>
 void appendFile(char* args) {
 	int fd[2];
@@ -131,7 +176,7 @@ void logicalOr(char* args) {
 		execpl(args[1], args[1], NULL);
 
 	wait(NULL);
-}
+}*/
 
 int main() {
 	char sentence[MAX_INSTRUCTION_LENGTH];
@@ -139,7 +184,7 @@ int main() {
 	char host[MAX_HOST_LENGTH];
 	char path[MAX_PATH_LENGTH];
 
-    gethostname(host, MAX_HOST_LENGTH);
+    //gethostname(host, MAX_HOST_LENGTH);
     getcwd(path, MAX_PATH_LENGTH);
 
     while(1) {
