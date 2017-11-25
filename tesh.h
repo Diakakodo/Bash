@@ -1,5 +1,6 @@
 int string_length(char*);
 char** parseSentence(char*);
+void execOperation(char**);
 void analyseInstruction(char*, char*);
 char* getInstruction(char*);
 void appendFile(char* args);

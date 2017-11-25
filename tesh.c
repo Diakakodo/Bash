@@ -22,6 +22,20 @@ int string_length(char* string) {
 	return length;
 }
 
+//Renvoie le nombre d'occurences de car dans string
+int number_of_occurences(char* string, char car) {
+	int n = string_length(string);
+	int count = 0;
+
+	for (int i=0;i<n;i++){
+		if (string[i]==car){
+			count++;
+		}
+	}
+
+	return count;
+}
+
 // On met les commandes et arguments dans un tableau
 char** parseSentence(char* sentence) {
 
@@ -49,16 +63,71 @@ char** parseSentence(char* sentence) {
 	return tabSentence;
 }
 
+/*
+//On exécute la commande qui n'est ni cd ni un symbole
+void execOperation(char** args) {
+
+	pid_t pid, wpid;
+	int status;
+
+	pid = fork();
+	if (pid == 0) {
+		execvp(args[0], args);
+	 } else {
+		 do {
+	  	 wpid = waitpid(pid, &status, WUNTRACED);
+		 } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+	 }
+}*/
+
 void analyseInstruction(char* sentence, char* path) {
-	char** tabSentence = parseSentence(sentence);
+	//Création du tableau des mots
+	int nb = number_of_occurences(sentence, ';');
+	char** tabSentence;
+	int i;
 
-	printf("Test test\n");
-
-	if(!strcmp(sentence, "cd")) {
-
+	//S'il y a un espace au début on le supprime
+	if (sentence[0]==' ') {
+		sentence = sentence+1;
 	}
 
-	sentence = "";
+	if (nb){
+		char sub_sentence[MAX_INSTRUCTION_LENGTH];
+		i=0;
+
+		while (sentence[i]!=';'){
+			sub_sentence[i]=sentence[i];
+			i++;
+		}
+
+		//S'il y a un espace à la fin on le supprime
+		if (sentence[i-1]==' ') {
+			sub_sentence[i-1]='\0';
+		}
+		else {
+			sub_sentence[i]='\0';
+		}
+
+		tabSentence = parseSentence(sub_sentence);
+	}
+
+	else {
+		tabSentence = parseSentence(sentence);
+	}
+
+	printf("Appel d'analyse\n");
+
+
+	//Exécution de l'instruction
+	if(!strcmp(tabSentence[0], "cd")) {
+		//execOperation(tabSentence);
+	}
+
+
+	//Appel récursif des autres instructions
+	if (nb && i+1<string_length(sentence)){
+		analyseInstruction(sentence+i+1, path);
+	}
 }
 
 char* getInstruction(char* sentence) {
@@ -78,7 +147,7 @@ char* getInstruction(char* sentence) {
 
 /*
 // >>
-void appendFile(char* args) {
+void appendFile(char** args) {
 	int fd[2];
 	pipe(fd);
 	char bufin[BUFSIZE] = "empty";
@@ -89,13 +158,11 @@ void appendFile(char* args) {
 		dup2(fd, 1);
 		close(fd);
 		execlp(args[0], args[0], NULL);
-		//
-
 	}
 }
 
 // >
-void createFile(char* args) {
+void createFile(char** args) {
 	int fd[2];
 	pipe(fd);
 
@@ -104,13 +171,11 @@ void createFile(char* args) {
 		dup2(fd, 1);
 		close(fd);
 		execlp(args[0], args[0], NULL);
-		//
-
 	}
 }
 
 // <
-void readFromFile(char* args) {
+void readFromFile(char** args) {
 	int fd[2];
 	pipe(fd);
 
@@ -119,14 +184,11 @@ void readFromFile(char* args) {
 		dup2(fd, 0);
 		close(fd);
 		execlp(args[0], args[0], NULL) ;
-		//
-
-
 	}
 }
 
 // |
-void pipeOperation(char* args) {
+void pipeOperation(char** args) {
 	int fd[2];
 	pipe(fd);
 
@@ -149,7 +211,7 @@ void pipeOperation(char* args) {
 }
 
 // &&
-void logicalAnd(char* args) {
+void logicalAnd(char** args) {
 	int status;
 
 	if(fork() == 0)
@@ -164,7 +226,7 @@ void logicalAnd(char* args) {
 }
 
 // ||
-void logicalOr(char* args) {
+void logicalOr(char** args) {
 	int status;
 
 	if(fork() == 0)
