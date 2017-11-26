@@ -60,18 +60,20 @@ int number_of_occurences(char* string, char car) {
 // On met les commandes et arguments dans un tableau
 char** parseSentence(char* sentence) {
 	int length = stringLength(sentence);
-	char** tabSentence = (char**)malloc((length / 2) * sizeof(char*));
+	char** tabSentence = malloc((length / 2) * sizeof(char*));
 	const char delimiter[2] = " ";
 	char* word;
 	int count = 0;
 
 	word = strtok(sentence, delimiter);
 
-	while (word != NULL) {
+	while(word != NULL) {
 		tabSentence[count] = word;
 		count++;
 		word = strtok(NULL, delimiter);
 	}
+
+	tabSentence[count] = NULL;
 
 	//Affichage pour test
 	printf("Tableau final :\n");
@@ -84,12 +86,12 @@ char** parseSentence(char* sentence) {
 }
 
 /*
-//On exécute la commande qui n'est ni cd ni un symbole
+//On exécute la commande qui n'est pas un symbole
 int execOperation(char** args) {
 	pid_t pid, wpid;
 	int status;
 
-	for(i = 0; i < nb_builtin(); i++)
+	for(i = 0; i < nbBuiltins(); i++)
     	if(strcmp(args[0], builtin[i]) == 0)
     		return (*builtin_func[i])(args);
 
@@ -100,7 +102,7 @@ int execOperation(char** args) {
 	} else {
 		do {
 	  		wpid = waitpid(pid, &status, WUNTRACED);
-		} while (!WIFEXITED(status) && !WIFSIGNALED(status));
+		} while(!WIFEXITED(status) && !WIFSIGNALED(status));
 	}
 
 	return 1;
@@ -140,13 +142,9 @@ int analyseInstruction(char* sentence) {
 
 	printf("Appel d'analyse\n");
 
-
 	//Exécution de l'instruction
-	if(!strcmp(tabSentence[0], "cd")) {
-		//if(execOperation(tabSentence))
-		//	return 0;
-	}
-
+	//if(execOperation(tabSentence))
+	//	return 0;
 
 	//Appel récursif des autres instructions
 	if (nb && i + 1 < stringLength(sentence)) {
@@ -171,6 +169,7 @@ char* getInstruction(char* sentence) {
 	analyseInstruction(sentence);
 }
 
+/*
 // < > >>
 int readOrCreateFile(char* symbol, char** args1, char** args2) {
 	int pid, fd;
@@ -196,7 +195,7 @@ int readOrCreateFile(char* symbol, char** args1, char** args2) {
 		}
 
 		close(fd);
-		execvp(*args1, args1);
+		execlp(*args1, *args1, NULL);
 		fprintf(stderr, "Failed to execute %s\n", args1[0]);
 	} else {
 		waitpid(pid, 0, 0);
@@ -206,7 +205,6 @@ int readOrCreateFile(char* symbol, char** args1, char** args2) {
 	return 1;
 }
 
-/*
 // |
 void pipeOperation(char** args1, char** args2) {
 	int fd[2];
