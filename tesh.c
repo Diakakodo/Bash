@@ -171,48 +171,42 @@ char* getInstruction(char* sentence) {
 	analyseInstruction(sentence);
 }
 
+// < > >>
+int readOrCreateFile(char* symbol, char** args1, char** args2) {
+	int pid, fd;
+
+	if((pid = fork()) < 0)
+		perror("fork failed");
+	else if(pid == 0) {
+		if(symbol[0] == '<') {
+			if((fd = open(*args2, O_RDONLY, 0)) < 0)
+				perror("open failed");
+
+			dup2(fd, 0);
+		} else if(symbol[0] == '>') {
+			if((fd = creat(*args2, O_WRONLY)) < 0)
+				perror("creat failed");
+
+			dup2(fd, 1);
+		} else if(strcmp(symbol, ">>")) {
+			if((fd = open(*args2, O_WRONLY | O_APPEND)) < 0)
+				perror("open failed");
+
+			dup2(fd, 1);
+		}
+
+		close(fd);
+		execvp(*args1, args1);
+		fprintf(stderr, "Failed to execute %s\n", args1[0]);
+	} else {
+		waitpid(pid, 0, 0);
+		free(args1);
+	}
+
+	return 1;
+}
+
 /*
-// >>
-void appendFile(char** args1, char** args2) {
-	int fd[2];
-	pipe(fd);
-	char bufin[BUFSIZE] = "empty";
-	char bufout[ ] = "hello";
-
-	if(!fork()) {
-		fd = open(args[1], O_WRONLY | O_APPEND);
-		dup2(fd, 1);
-		close(fd);
-		execlp(args[0], args[0], NULL);
-	}
-}
-
-// >
-void createFile(char** args1, char** args2) {
-	int fd[2];
-	pipe(fd);
-
-	if(!fork()) {
-		fd = open(args[1], O_WRONLY);
-		dup2(fd, 1);
-		close(fd);
-		execlp(args[0], args[0], NULL);
-	}
-}
-
-// <
-void readFromFile(char** args1, char** args2) {
-	int fd[2];
-	pipe(fd);
-
-	if(!fork()) {
-		fd = open(args[1], O_RDONLY);
-		dup2(fd, 0);
-		close(fd);
-		execlp(args[0], args[0], NULL) ;
-	}
-}
-
 // |
 void pipeOperation(char** args1, char** args2) {
 	int fd[2];
@@ -222,19 +216,20 @@ void pipeOperation(char** args1, char** args2) {
 		dup2(fd[1], 1);
 		close(fd[0]);
 		close(fd[1]);
-		execlp(args[0], args[0], NULL);
+		execlp(*args1, *args1, NULL);
 	}
 
 	if(fork() == 0) {
 		dup2(fd[0], 0);
 		close(fd[0]);
 		close(fd[1]);
-		execlp(args[1], args[1], NULL);
+		execlp(*args2, *args2, NULL);
 	}
 
 	wait(NULL);
 	wait(NULL);
 }
+
 
 // &&
 void logicalAnd(char** args1, char** args2) {
@@ -256,15 +251,16 @@ void logicalOr(char** args1, char** args2) {
 	int status;
 
 	if(fork() == 0)
-		execlp(args[0], args[0], NULL);
+		execlp(*args1, *args1, NULL);
 
 	wait(&status);
 
 	if((WEXITED(status) && (WEXITSTATUS(status) != 0)) && fork() == 0)
-		execpl(args[1], args[1], NULL);
+		execlp(*args1, *args1, NULL);
 
 	wait(NULL);
-}*/
+}
+*/
 
 int main() {
 	char sentence[MAX_INSTRUCTION_LENGTH];

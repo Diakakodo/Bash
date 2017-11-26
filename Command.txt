@@ -1,12 +1,6 @@
-cd
-prompt de la forme "USER@HOSTNAME:REPCOURANT$"
+HOSTNAME
 &&
-||
-|
-<
->
->>
-interactif ou non interactif (pas de prompt)
+interactif ou non interactif
 -e
 & (commande en arrière plan)
 -r
