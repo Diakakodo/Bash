@@ -7,12 +7,33 @@
 
 #define MAX_INSTRUCTION_LENGTH 256
 #define MAX_HOST_LENGTH 64
-#define MAX_PATH_LENGTH 128
+#define MAX_PATH_LENGTH 256
 #define BUFSIZE 256
 
-// Renvoie la longueur d'une chaîne de caractères
-int string_length(char* string) {
+int cdFonction(char** args) {
+  if(args[1] == NULL)
+    fprintf(stderr, "Argument manquant\n");
+  else {
+    if(chdir(args[1]) != 0)
+      perror("Dossier inexistant");
+  }
 
+  return 1;
+}
+
+int exitFonction(char** args) {
+	return 0;
+}
+
+char* builtin[] = {"cd", "exit"};
+int (*builtin_func[])(char**) = {&cdFonction, &exitFonction};
+
+int nbBuiltins() {
+  return sizeof(builtin) / sizeof(char*);
+}
+
+// Renvoie la longueur d'une chaîne de caractères
+int stringLength(char* string) {
 	int length = 0;
 
 	while (string[length] != '\0') {
@@ -24,11 +45,11 @@ int string_length(char* string) {
 
 //Renvoie le nombre d'occurences de car dans string
 int number_of_occurences(char* string, char car) {
-	int n = string_length(string);
+	int n = stringLength(string);
 	int count = 0;
 
-	for (int i=0;i<n;i++){
-		if (string[i]==car){
+	for (int i = 0; i < n; i++) {
+		if (string[i] == car) {
 			count++;
 		}
 	}
@@ -38,9 +59,8 @@ int number_of_occurences(char* string, char car) {
 
 // On met les commandes et arguments dans un tableau
 char** parseSentence(char* sentence) {
-
-	int length = string_length(sentence);
-	char** tabSentence = (char**) malloc((length/2)*sizeof(char*));
+	int length = stringLength(sentence);
+	char** tabSentence = (char**)malloc((length / 2) * sizeof(char*));
 	const char delimiter[2] = " ";
 	char* word;
 	int count = 0;
@@ -56,8 +76,8 @@ char** parseSentence(char* sentence) {
 	//Affichage pour test
 	printf("Tableau final :\n");
 
-	for (int i=0; i<count; i++) {
-		printf( "%s\n", tabSentence[i]);
+	for (int i = 0; i < count; i++) {
+		printf("%s\n", tabSentence[i]);
 	}
 
 	return tabSentence;
@@ -65,53 +85,56 @@ char** parseSentence(char* sentence) {
 
 /*
 //On exécute la commande qui n'est ni cd ni un symbole
-void execOperation(char** args) {
-
+int execOperation(char** args) {
 	pid_t pid, wpid;
 	int status;
 
+	for(i = 0; i < nb_builtin(); i++)
+    	if(strcmp(args[0], builtin[i]) == 0)
+    		return (*builtin_func[i])(args);
+
 	pid = fork();
-	if (pid == 0) {
+
+	if(pid == 0) {
 		execvp(args[0], args);
-	 } else {
-		 do {
-	  	 wpid = waitpid(pid, &status, WUNTRACED);
-		 } while (!WIFEXITED(status) && !WIFSIGNALED(status));
-	 }
+	} else {
+		do {
+	  		wpid = waitpid(pid, &status, WUNTRACED);
+		} while (!WIFEXITED(status) && !WIFSIGNALED(status));
+	}
+
+	return 1;
 }*/
 
-void analyseInstruction(char* sentence, char* path) {
+int analyseInstruction(char* sentence) {
 	//Création du tableau des mots
 	int nb = number_of_occurences(sentence, ';');
 	char** tabSentence;
 	int i;
 
 	//S'il y a un espace au début on le supprime
-	if (sentence[0]==' ') {
-		sentence = sentence+1;
+	if(sentence[0] == ' ') {
+		sentence = sentence + 1;
 	}
 
-	if (nb){
+	if(nb) {
 		char sub_sentence[MAX_INSTRUCTION_LENGTH];
-		i=0;
+		i = 0;
 
-		while (sentence[i]!=';'){
-			sub_sentence[i]=sentence[i];
+		while (sentence[i] != ';') {
+			sub_sentence[i] = sentence[i];
 			i++;
 		}
 
 		//S'il y a un espace à la fin on le supprime
-		if (sentence[i-1]==' ') {
-			sub_sentence[i-1]='\0';
-		}
-		else {
-			sub_sentence[i]='\0';
+		if (sentence[i - 1] == ' ') {
+			sub_sentence[i - 1] = '\0';
+		} else {
+			sub_sentence[i] = '\0';
 		}
 
 		tabSentence = parseSentence(sub_sentence);
-	}
-
-	else {
+	} else {
 		tabSentence = parseSentence(sentence);
 	}
 
@@ -120,14 +143,17 @@ void analyseInstruction(char* sentence, char* path) {
 
 	//Exécution de l'instruction
 	if(!strcmp(tabSentence[0], "cd")) {
-		//execOperation(tabSentence);
+		//if(execOperation(tabSentence))
+		//	return 0;
 	}
 
 
 	//Appel récursif des autres instructions
-	if (nb && i+1<string_length(sentence)){
-		analyseInstruction(sentence+i+1, path);
+	if (nb && i + 1 < stringLength(sentence)) {
+		analyseInstruction(sentence + i + 1);
 	}
+
+	return 1;
 }
 
 char* getInstruction(char* sentence) {
@@ -142,12 +168,12 @@ char* getInstruction(char* sentence) {
 		return sentence;
 	} else return NULL;
 
-	analyseInstruction(sentence, "");
+	analyseInstruction(sentence);
 }
 
 /*
 // >>
-void appendFile(char** args) {
+void appendFile(char** args1, char** args2) {
 	int fd[2];
 	pipe(fd);
 	char bufin[BUFSIZE] = "empty";
@@ -162,7 +188,7 @@ void appendFile(char** args) {
 }
 
 // >
-void createFile(char** args) {
+void createFile(char** args1, char** args2) {
 	int fd[2];
 	pipe(fd);
 
@@ -175,7 +201,7 @@ void createFile(char** args) {
 }
 
 // <
-void readFromFile(char** args) {
+void readFromFile(char** args1, char** args2) {
 	int fd[2];
 	pipe(fd);
 
@@ -188,7 +214,7 @@ void readFromFile(char** args) {
 }
 
 // |
-void pipeOperation(char** args) {
+void pipeOperation(char** args1, char** args2) {
 	int fd[2];
 	pipe(fd);
 
@@ -211,7 +237,7 @@ void pipeOperation(char** args) {
 }
 
 // &&
-void logicalAnd(char** args) {
+void logicalAnd(char** args1, char** args2) {
 	int status;
 
 	if(fork() == 0)
@@ -226,7 +252,7 @@ void logicalAnd(char** args) {
 }
 
 // ||
-void logicalOr(char** args) {
+void logicalOr(char** args1, char** args2) {
 	int status;
 
 	if(fork() == 0)
@@ -242,19 +268,21 @@ void logicalOr(char** args) {
 
 int main() {
 	char sentence[MAX_INSTRUCTION_LENGTH];
-	char* user = getenv("USERNAME");
+	const char* user = getenv("USERNAME");
 	char host[MAX_HOST_LENGTH];
 	char path[MAX_PATH_LENGTH];
+	int status = 1;
 
-    //gethostname(host, MAX_HOST_LENGTH);
-    getcwd(path, MAX_PATH_LENGTH);
+    gethostname(host, MAX_HOST_LENGTH);
+    chdir(getenv("USERPROFILE"));			//chdir(getenv("HOME"));
 
-    while(1) {
+    while(status) {
+    	getcwd(path, sizeof(path));
     	printf("%s@%s:%s$ ", user, host, path);
     	getInstruction(sentence);
 
     	if(strcmp(sentence, ""))
-    		analyseInstruction(sentence, path);
+    		status = analyseInstruction(sentence);
     }
 
     return 0;
