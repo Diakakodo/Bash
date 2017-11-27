@@ -146,7 +146,7 @@ int analyseInstruction(char* sentence) {
 	} else {
 		//On teste s'il y a un &&
 		if (number_of_occurences(sentence, '&')>1) {
-			executeIfFirstSucceeds(sentence);
+			return executeIfFirstSucceeds(sentence);
 		}
 
 		else {
