@@ -135,9 +135,23 @@ int analyseInstruction(char* sentence) {
 			sub_sentence[i] = '\0';
 		}
 
-		tabSentence = parseSentence(sub_sentence);
+		//On teste s'il y a un &&
+		if (number_of_occurences(sub_sentence, '&')>1) {
+			executeIfFirstSucceeds(sub_sentence);
+		}
+
+		else {
+			tabSentence = parseSentence(sub_sentence);
+		}
 	} else {
-		tabSentence = parseSentence(sentence);
+		//On teste s'il y a un &&
+		if (number_of_occurences(sentence, '&')>1) {
+			executeIfFirstSucceeds(sentence);
+		}
+
+		else {
+			tabSentence = parseSentence(sentence);
+		}
 	}
 
 	printf("Appel d'analyse\n");
@@ -167,6 +181,23 @@ char* getInstruction(char* sentence) {
 	} else return NULL;
 
 	analyseInstruction(sentence);
+}
+
+//Fonction &&
+int executeIfFirstSucceeds(char* sentence){
+
+	const char delimiter[2] = "&&";
+	char* command;
+
+	command = strtok(sentence, delimiter);
+
+	if(analyseInstruction(command)){
+		command = strtok(sentence, delimiter);
+		return analyseInstruction(command);
+	}
+	else {
+		return 0;
+	}
 }
 
 /*
