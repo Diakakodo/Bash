@@ -336,22 +336,41 @@ int main(int argc, char** argv) {
 	const char* user = getenv("USERNAME");
 	char host[MAX_HOST_LENGTH];
 	char path[MAX_PATH_LENGTH];
-	char fileToRead[MAX_FILENAME_LENGTH];
 	int errorMode = 0;
+	int readLineMode = 0;
 	int status = 1;
+	int count = 0;
+	int posErrorMode = 0;
 
     //gethostname(host, MAX_HOST_LENGTH);
     chdir(getenv("USERPROFILE"));			//chdir(getenv("HOME"));
 
     if(argc > 1) {
-    	if(strcmp(argv[1], "-e") == 0 || strcmp(argv[2], "-e") == 0)
-    		errorMode = 1;
+    	for(int i = 1; i < argc; i++) {
+    		if(strcmp(argv[i], "-e")) {
+    			errorMode = 1;
+    			posErrorMode = i;
+    			count++;
+    		}
 
-    	if(strcmp(argv[1], "-r") == 0 || strcmp(argv[2], "-r") == 0) {
+    		if(strcmp(argv[i], "-r")) {
+    			readLineMode = 1;
+    			count++;
+    		}
+    	}
+
+    	if(argc - count == 2) {
 		    FILE* file = NULL;
 		    char line[MAX_LINE_LENGTH] = "";
     		status = 0;
-    		strcpy(fileToRead, argv[2]);
+
+    		if(argc == 2)
+    			file = fopen(argv[1], "r");
+    		else {
+    			if(posErrorMode == 1)
+    				file = fopen(argv[2], "r");
+    			else file = fopen(argv[1], "r");
+    		}
 
     		file = fopen(argv[2], "r");
 

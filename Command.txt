@@ -1,4 +1,3 @@
-interactif ou non interactif
--e (sortie dès qu'il y a une erreur)
 & (commande en arrière plan)
 -r (édition interactive de la ligne de commande et gestion de l'historique)
+isatty(0) == 0
