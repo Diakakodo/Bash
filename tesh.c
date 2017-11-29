@@ -3,34 +3,170 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <winsock2.h>
 
 #define MAX_INSTRUCTION_LENGTH 256
 #define MAX_HOST_LENGTH 64
 #define MAX_PATH_LENGTH 256
+#define MAX_FILENAME_LENGTH 64
+#define MAX_LINE_LENGTH 512
 #define BUFSIZE 256
 
-int cdFonction(char** args) {
+int cdFonction(char** args, int errorMode) {
   if(args[1] == NULL)
     fprintf(stderr, "Argument manquant\n");
   else {
-    if(chdir(args[1]) != 0)
-      perror("Dossier inexistant");
+    if(chdir(args[1]) != 0) {
+		if(errorMode)
+			return 0;
+		else perror("Dossier inexistant");
+    }
   }
 
   return 1;
 }
 
-int exitFonction(char** args) {
+int exitFonction(char** args, int errorMode) {
 	return 0;
 }
 
 char* builtin[] = {"cd", "exit"};
-int (*builtin_func[])(char**) = {&cdFonction, &exitFonction};
+int (*builtin_func[])(char**, int) = {&cdFonction, &exitFonction};
 
 int nbBuiltins() {
   return sizeof(builtin) / sizeof(char*);
 }
+
+/*
+// < > >>
+int readOrCreateFile(char* symbol, char** args1, char** args2, int errorMode) {
+	pid_t pid;
+	int fd;
+
+	if((pid = fork()) < 0) {
+		if(errorMode)
+			return 0;
+		else perror("fork failed");
+	} else if(pid == 0) {
+		if(symbol[0] == '<') {
+			if((fd = open(*args2, O_RDONLY, 0)) < 0) {
+				if(errorMode)
+					return 0;
+				else perror("open failed");
+			}
+
+			dup2(fd, 0);
+		} else if(symbol[0] == '>') {
+			if((fd = creat(*args2, O_WRONLY)) < 0) {
+				if(errorMode)
+					return 0;
+				else perror("creat failed");
+			}
+
+			dup2(fd, 1);
+		} else if(strcmp(symbol, ">>")) {
+			if((fd = open(*args2, O_WRONLY | O_APPEND)) < 0)
+				if(errorMode)
+					return 0;
+				else perror("open failed");
+			}
+
+			dup2(fd, 1);
+		}
+
+		close(fd);
+		execvp(args1[0], args1);
+
+		if(errorMode)
+			return 0;
+		else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+	} else {
+		waitpid(pid, 0, 0);
+		free(args1);
+	}
+
+	return 1;
+}
+
+// |
+int pipeOperation(char** args1, char** args2, int errorMode) {
+	int fd[2];
+	pid_t pid;
+	pipe(fd);
+
+	if((pid = fork()) < 0) {
+		if(errorMode)
+			return 0;
+		else perror("fork failed");
+	} else if(pid == 0) {
+		dup2(fd[1], 1);
+		close(fd[0]);
+		close(fd[1]);
+		execvp(args1[0], args1);
+
+		if(errorMode)
+			return 0;
+		else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+	}
+
+	if((pid = fork()) < 0) {
+		if(errorMode)
+			return 0;
+		else perror("fork failed");
+	} else if(pid == 0) {
+		dup2(fd[0], 0);
+		close(fd[0]);
+		close(fd[1]);
+		execvp(args1[0], args1);
+
+		if(errorMode)
+			return 0;
+		else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+	}
+
+	wait(NULL);
+	wait(NULL);
+
+	return 1;
+}
+
+// ||
+int logicalOr(char** args1, char** args2, int errorMode) {
+	int status;
+	pid_t pid;
+
+	if((pid = fork()) < 0) {
+		if(errorMode)
+			return 0;
+		else perror("fork failed");
+	} else if(pid == 0) {
+		execvp(args1[0], args1);
+
+		if(errorMode)
+			return 0;
+		else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+	}
+
+	wait(&status);
+
+	if((WEXITED(status) && (WEXITSTATUS(status) != 0)))) {
+		if((pid = fork()) < 0) {
+			if(errorMode)
+				return 0;
+			else perror("fork failed");
+		} else if(pid == 0) {
+			execvp(args1[0], args1);
+
+			if(errorMode)
+				return 0;
+			else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+		}
+	}
+
+	wait(NULL);
+
+	return 1;
+}
+*/
 
 // Renvoie la longueur d'une chaîne de caractères
 int stringLength(char* string) {
@@ -44,15 +180,13 @@ int stringLength(char* string) {
 }
 
 //Renvoie le nombre d'occurences de car dans string
-int number_of_occurences(char* string, char car) {
+int numberOfOccurences(char* string, char car) {
 	int n = stringLength(string);
 	int count = 0;
 
-	for (int i = 0; i < n; i++) {
-		if (string[i] == car) {
+	for (int i = 0; i < n; i++)
+		if (string[i] == car)
 			count++;
-		}
-	}
 
 	return count;
 }
@@ -87,7 +221,7 @@ char** parseSentence(char* sentence) {
 
 /*
 //On exécute la commande qui n'est pas un symbole
-int execOperation(char** args) {
+int execOperation(char** args, int errorMode) {
 	pid_t pid, wpid;
 	int status;
 
@@ -95,10 +229,16 @@ int execOperation(char** args) {
     	if(strcmp(args[0], builtin[i]) == 0)
     		return (*builtin_func[i])(args);
 
-	pid = fork();
-
-	if(pid == 0) {
+	if((pid = fork()) < 0) {
+		if(errorMode)
+			return 0;
+		else perror("fork failed");
+	} else if(pid == 0) {
 		execvp(args[0], args);
+
+		if(errorMode)
+				return 0;
+		else fprintf(stderr, "Failed to execute %s\n", args1[0]);
 	} else {
 		do {
 	  		wpid = waitpid(pid, &status, WUNTRACED);
@@ -108,16 +248,15 @@ int execOperation(char** args) {
 	return 1;
 }*/
 
-int analyseInstruction(char* sentence) {
+int analyseInstruction(char* sentence, int errorMode) {
 	//Création du tableau des mots
-	int nb = number_of_occurences(sentence, ';');
+	int nb = numberOfOccurences(sentence, ';');
 	char** tabSentence;
 	int i;
 
 	//S'il y a un espace au début on le supprime
-	if(sentence[0] == ' ') {
+	if(sentence[0] == ' ')
 		sentence = sentence + 1;
-	}
 
 	if(nb) {
 		char sub_sentence[MAX_INSTRUCTION_LENGTH];
@@ -136,20 +275,16 @@ int analyseInstruction(char* sentence) {
 		}
 
 		//On teste s'il y a un &&
-		if (number_of_occurences(sub_sentence, '&')>1) {
+		if (numberOfOccurences(sub_sentence, '&') > 1) {
 			executeIfFirstSucceeds(sub_sentence);
-		}
-
-		else {
+		} else {
 			tabSentence = parseSentence(sub_sentence);
 		}
 	} else {
 		//On teste s'il y a un &&
-		if (number_of_occurences(sentence, '&')>1) {
+		if (numberOfOccurences(sentence, '&') > 1) {
 			return executeIfFirstSucceeds(sentence);
-		}
-
-		else {
+		} else {
 			tabSentence = parseSentence(sentence);
 		}
 	}
@@ -157,15 +292,30 @@ int analyseInstruction(char* sentence) {
 	printf("Appel d'analyse\n");
 
 	//Exécution de l'instruction
-	//if(execOperation(tabSentence))
+	//if(execOperation(tabSentence, errorMode))
 	//	return 0;
 
 	//Appel récursif des autres instructions
 	if (nb && i + 1 < stringLength(sentence)) {
-		analyseInstruction(sentence + i + 1);
+		analyseInstruction(sentence + i + 1, errorMode);
 	}
 
 	return 1;
+}
+
+//Fonction &&
+int executeIfFirstSucceeds(char* sentence, int errorMode) {
+	const char delimiter[2] = "&&";
+	char* command;
+
+	command = strtok(sentence, delimiter);
+
+	if(analyseInstruction(command, errorMode)) {
+		command = strtok(sentence, delimiter);
+		return analyseInstruction(command, errorMode);
+	} else {
+		return 0;
+	}
 }
 
 char* getInstruction(char* sentence) {
@@ -179,127 +329,42 @@ char* getInstruction(char* sentence) {
 
 		return sentence;
 	} else return NULL;
-
-	analyseInstruction(sentence);
 }
 
-//Fonction &&
-int executeIfFirstSucceeds(char* sentence){
-
-	const char delimiter[2] = "&&";
-	char* command;
-
-	command = strtok(sentence, delimiter);
-
-	if(analyseInstruction(command)){
-		command = strtok(sentence, delimiter);
-		return analyseInstruction(command);
-	}
-	else {
-		return 0;
-	}
-}
-
-/*
-// < > >>
-int readOrCreateFile(char* symbol, char** args1, char** args2) {
-	int pid, fd;
-
-	if((pid = fork()) < 0)
-		perror("fork failed");
-	else if(pid == 0) {
-		if(symbol[0] == '<') {
-			if((fd = open(*args2, O_RDONLY, 0)) < 0)
-				perror("open failed");
-
-			dup2(fd, 0);
-		} else if(symbol[0] == '>') {
-			if((fd = creat(*args2, O_WRONLY)) < 0)
-				perror("creat failed");
-
-			dup2(fd, 1);
-		} else if(strcmp(symbol, ">>")) {
-			if((fd = open(*args2, O_WRONLY | O_APPEND)) < 0)
-				perror("open failed");
-
-			dup2(fd, 1);
-		}
-
-		close(fd);
-		execlp(*args1, *args1, NULL);
-		fprintf(stderr, "Failed to execute %s\n", args1[0]);
-	} else {
-		waitpid(pid, 0, 0);
-		free(args1);
-	}
-
-	return 1;
-}
-
-// |
-void pipeOperation(char** args1, char** args2) {
-	int fd[2];
-	pipe(fd);
-
-	if(fork() == 0) {
-		dup2(fd[1], 1);
-		close(fd[0]);
-		close(fd[1]);
-		execlp(*args1, *args1, NULL);
-	}
-
-	if(fork() == 0) {
-		dup2(fd[0], 0);
-		close(fd[0]);
-		close(fd[1]);
-		execlp(*args2, *args2, NULL);
-	}
-
-	wait(NULL);
-	wait(NULL);
-}
-
-
-// &&
-void logicalAnd(char** args1, char** args2) {
-	int status;
-
-	if(fork() == 0)
-		execlp(args[0], args[0], NULL);
-
-	wait(&status);
-
-
-
-
-	wait(NULL);
-}
-
-// ||
-void logicalOr(char** args1, char** args2) {
-	int status;
-
-	if(fork() == 0)
-		execlp(*args1, *args1, NULL);
-
-	wait(&status);
-
-	if((WEXITED(status) && (WEXITSTATUS(status) != 0)) && fork() == 0)
-		execlp(*args1, *args1, NULL);
-
-	wait(NULL);
-}
-*/
-
-int main() {
+int main(int argc, char** argv) {
 	char sentence[MAX_INSTRUCTION_LENGTH];
 	const char* user = getenv("USERNAME");
 	char host[MAX_HOST_LENGTH];
 	char path[MAX_PATH_LENGTH];
+	char fileToRead[MAX_FILENAME_LENGTH];
+	int errorMode = 0;
 	int status = 1;
 
-    gethostname(host, MAX_HOST_LENGTH);
+    //gethostname(host, MAX_HOST_LENGTH);
     chdir(getenv("USERPROFILE"));			//chdir(getenv("HOME"));
+
+    if(argc > 1) {
+    	if(strcmp(argv[1], "-e") == 0 || strcmp(argv[2], "-e") == 0)
+    		errorMode = 1;
+
+    	if(strcmp(argv[1], "-r") == 0 || strcmp(argv[2], "-r") == 0) {
+		    FILE* file = NULL;
+		    char line[MAX_LINE_LENGTH] = "";
+    		status = 0;
+    		strcpy(fileToRead, argv[2]);
+
+    		file = fopen(argv[2], "r");
+
+			if (file != NULL) {
+		        while(fgets(line, MAX_LINE_LENGTH, file) != NULL) {
+		        	strcat(sentence, line);
+		        	strcat(sentence, " ; ");
+		        }
+
+		        analyseInstruction(sentence, errorMode);
+			} else printf("Impossible d'ouvrir le fichier %s", argv[2]);
+    	}
+    }
 
     while(status) {
     	getcwd(path, sizeof(path));
@@ -307,7 +372,7 @@ int main() {
     	getInstruction(sentence);
 
     	if(strcmp(sentence, ""))
-    		status = analyseInstruction(sentence);
+    		status = analyseInstruction(sentence, errorMode);
     }
 
     return 0;
