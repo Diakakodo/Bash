@@ -3,6 +3,10 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include "tesh.h"
 
 #define MAX_INSTRUCTION_LENGTH 256
 #define MAX_HOST_LENGTH 64
@@ -16,17 +20,18 @@ int cdFonction(char** args, int errorMode) {
     fprintf(stderr, "Argument manquant\n");
   else {
     if(chdir(args[1]) != 0) {
-		if(errorMode)
-			return 0;
-		else perror("Dossier inexistant");
+        if(errorMode)
+            return errno;
+        else perror("Dossier inexistant");
     }
   }
 
-  return 1;
+  return 0;
 }
 
 int exitFonction(char** args, int errorMode) {
-	return 0;
+    exit(EXIT_SUCCESS);
+    return 1;
 }
 
 char* builtin[] = {"cd", "exit"};
@@ -36,362 +41,376 @@ int nbBuiltins() {
   return sizeof(builtin) / sizeof(char*);
 }
 
-/*
 // < > >>
 int readOrCreateFile(char* symbol, char** args1, char** args2, int errorMode) {
-	pid_t pid;
-	int fd;
+    pid_t pid;
+    int fd;
 
-	if((pid = fork()) < 0) {
-		if(errorMode)
-			return 0;
-		else perror("fork failed");
-	} else if(pid == 0) {
-		if(symbol[0] == '<') {
-			if((fd = open(*args2, O_RDONLY, 0)) < 0) {
-				if(errorMode)
-					return 0;
-				else perror("open failed");
-			}
+    if((pid = fork()) < 0) {
+        if(errorMode)
+            return errno;
+        else perror("fork failed");
+    } else if(pid == 0) {
+        if(symbol[0] == '<') {
+            if((fd = open(*args2, O_RDONLY, 0)) < 0) {
+                if(errorMode)
+                    return errno;
+                else perror("open failed");
+            }
 
-			dup2(fd, 0);
-		} else if(symbol[0] == '>') {
-			if((fd = creat(*args2, O_WRONLY)) < 0) {
-				if(errorMode)
-					return 0;
-				else perror("creat failed");
-			}
+            dup2(fd, 0);
+        } else if(symbol[0] == '>') {
+            if((fd = creat(*args2, O_WRONLY)) < 0) {
+                if(errorMode)
+                    return errno;
+                else perror("creat failed");
+            }
 
-			dup2(fd, 1);
-		} else if(strcmp(symbol, ">>")) {
-			if((fd = open(*args2, O_WRONLY | O_APPEND)) < 0)
-				if(errorMode)
-					return 0;
-				else perror("open failed");
-			}
+            dup2(fd, 1);
+        } else if(strcmp(symbol, ">>")) {
+            if((fd = open(*args2, O_WRONLY | O_APPEND)) < 0) {
+                if(errorMode)
+                    return errno;
+                else perror("open failed");
+            }
 
-			dup2(fd, 1);
-		}
+            dup2(fd, 1);
+        }
 
-		close(fd);
-		execvp(args1[0], args1);
+        close(fd);
+        execvp(args1[0], args1);
 
-		if(errorMode)
-			return 0;
-		else fprintf(stderr, "Failed to execute %s\n", args1[0]);
-	} else {
-		waitpid(pid, 0, 0);
-		free(args1);
-	}
+        if(errorMode)
+            return 0;
+        else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+    } else {
+        waitpid(pid, 0, 0);
+        free(args1);
+    }
 
-	return 1;
+    return 0;
 }
 
 // |
 int pipeOperation(char** args1, char** args2, int errorMode) {
-	int fd[2];
-	pid_t pid;
-	pipe(fd);
+    int fd[2];
+    pid_t pid;
+    pipe(fd);
 
-	if((pid = fork()) < 0) {
-		if(errorMode)
-			return 0;
-		else perror("fork failed");
-	} else if(pid == 0) {
-		dup2(fd[1], 1);
-		close(fd[0]);
-		close(fd[1]);
-		execvp(args1[0], args1);
+    if((pid = fork()) < 0) {
+        if(errorMode)
+            return errno;
+        else perror("fork failed");
+    } else if(pid == 0) {
+        dup2(fd[1], 1);
+        close(fd[0]);
+        close(fd[1]);
+        execvp(args1[0], args1);
 
-		if(errorMode)
-			return 0;
-		else fprintf(stderr, "Failed to execute %s\n", args1[0]);
-	}
+        if(errorMode)
+            return errno;
+        else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+    }
 
-	if((pid = fork()) < 0) {
-		if(errorMode)
-			return 0;
-		else perror("fork failed");
-	} else if(pid == 0) {
-		dup2(fd[0], 0);
-		close(fd[0]);
-		close(fd[1]);
-		execvp(args1[0], args1);
+    if((pid = fork()) < 0) {
+        if(errorMode)
+            return errno;
+        else perror("fork failed");
+    } else if(pid == 0) {
+        dup2(fd[0], 0);
+        close(fd[0]);
+        close(fd[1]);
+        execvp(args1[0], args1);
 
-		if(errorMode)
-			return 0;
-		else fprintf(stderr, "Failed to execute %s\n", args1[0]);
-	}
+        if(errorMode)
+            return errno;
+        else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+    }
 
-	wait(NULL);
-	wait(NULL);
+    wait(NULL);
+    wait(NULL);
 
-	return 1;
+    return 0;
 }
 
 // ||
 int logicalOr(char** args1, char** args2, int errorMode) {
-	int status;
-	pid_t pid;
+    int status;
+    pid_t pid;
 
-	if((pid = fork()) < 0) {
-		if(errorMode)
-			return 0;
-		else perror("fork failed");
-	} else if(pid == 0) {
-		execvp(args1[0], args1);
+    if((pid = fork()) < 0) {
+        if(errorMode)
+            return errno;
+        else perror("fork failed");
+    } else if(pid == 0) {
+        execvp(args1[0], args1);
 
-		if(errorMode)
-			return 0;
-		else fprintf(stderr, "Failed to execute %s\n", args1[0]);
-	}
+        if(errorMode)
+            return errno;
+        else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+    }
 
-	wait(&status);
+    wait(&status);
 
-	if((WEXITED(status) && (WEXITSTATUS(status) != 0)))) {
-		if((pid = fork()) < 0) {
-			if(errorMode)
-				return 0;
-			else perror("fork failed");
-		} else if(pid == 0) {
-			execvp(args1[0], args1);
+    if(WIFEXITED(status) && (WEXITSTATUS(status) != 0)) {
+        if((pid = fork()) < 0) {
+            if(errorMode)
+                return errno;
+            else perror("fork failed");
+        } else if(pid == 0) {
+            execvp(args1[0], args1);
 
-			if(errorMode)
-				return 0;
-			else fprintf(stderr, "Failed to execute %s\n", args1[0]);
-		}
-	}
+            if(errorMode)
+                return errno;
+            else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+        }
+    }
 
-	wait(NULL);
+    wait(NULL);
 
-	return 1;
+    return 0;
 }
-*/
 
 // Renvoie la longueur d'une chaîne de caractères
 int stringLength(char* string) {
-	int length = 0;
+    int length = 0;
 
-	while (string[length] != '\0') {
-		length++;
-	}
+    while (string[length] != '\0') {
+        length++;
+    }
 
-	return length;
+    return length;
 }
 
 //Renvoie le nombre d'occurences de car dans string
 int numberOfOccurences(char* string, char car) {
-	int n = stringLength(string);
-	int count = 0;
+    int n = stringLength(string);
+    int count = 0;
 
-	for (int i = 0; i < n; i++)
-		if (string[i] == car)
-			count++;
+    for (int i = 0; i < n; i++)
+        if (string[i] == car)
+            count++;
 
-	return count;
+    return count;
 }
 
 // On met les commandes et arguments dans un tableau
 char** parseSentence(char* sentence) {
-	int length = stringLength(sentence);
-	char** tabSentence = malloc((length / 2) * sizeof(char*));
-	const char delimiter[2] = " ";
-	char* word;
-	int count = 0;
+    int length = stringLength(sentence);
+    char** tabSentence = malloc((length / 2) * sizeof(char*));
+    const char delimiter[2] = " ";
+    char* word;
+    int count = 0;
 
-	word = strtok(sentence, delimiter);
+    word = strtok(sentence, delimiter);
 
-	while(word != NULL) {
-		tabSentence[count] = word;
-		count++;
-		word = strtok(NULL, delimiter);
-	}
+    while(word != NULL) {
+        tabSentence[count] = word;
+        count++;
+        word = strtok(NULL, delimiter);
+    }
 
-	tabSentence[count] = NULL;
+    tabSentence[count] = NULL;
 
-	//Affichage pour test
-	printf("Tableau final :\n");
+    //Affichage pour test
+    /*printf("Tableau final :\n");
 
-	for (int i = 0; i < count; i++) {
-		printf("%s\n", tabSentence[i]);
-	}
+    for (int i = 0; i < count; i++) {
+        printf("%s\n", tabSentence[i]);
+    }*/
 
-	return tabSentence;
+    return tabSentence;
 }
 
-/*
 //On exécute la commande qui n'est pas un symbole
 int execOperation(char** args, int errorMode) {
-	pid_t pid, wpid;
-	int status;
+    pid_t pid;
+    int status;
 
-	for(i = 0; i < nbBuiltins(); i++)
-    	if(strcmp(args[0], builtin[i]) == 0)
-    		return (*builtin_func[i])(args);
+    for(int i = 0; i < nbBuiltins(); i++)
+        if(strcmp(args[0], builtin[i]) == 0)
+            return (*builtin_func[i])(args, errorMode);
 
-	if((pid = fork()) < 0) {
-		if(errorMode)
-			return 0;
-		else perror("fork failed");
-	} else if(pid == 0) {
-		execvp(args[0], args);
+    if((pid = fork()) < 0) {
+        if(errorMode)
+            return errno;
+        else perror("fork failed");
+    } else if(pid == 0) {
+        execvp(args[0], args);
 
-		if(errorMode)
-				return 0;
-		else fprintf(stderr, "Failed to execute %s\n", args1[0]);
-	} else {
-		do {
-	  		wpid = waitpid(pid, &status, WUNTRACED);
-		} while(!WIFEXITED(status) && !WIFSIGNALED(status));
-	}
+        if(errorMode)
+            return errno;
+        else fprintf(stderr, "Failed to execute %s\n", args[0]);
+    } else {
+        do {
+              waitpid(pid, &status, WUNTRACED);
+        } while(!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
 
-	return 1;
-}*/
+    return 0;
+}
 
 int analyseInstruction(char* sentence, int errorMode) {
-	//Création du tableau des mots
-	int nb = numberOfOccurences(sentence, ';');
-	char** tabSentence;
-	int i;
+    //Création du tableau des mots
+    int nb = numberOfOccurences(sentence, ';');
+    char** tabSentence;
+    int i;
 
-	//S'il y a un espace au début on le supprime
-	if(sentence[0] == ' ')
-		sentence = sentence + 1;
+    //S'il y a un espace au début on le supprime
+    if(sentence[0] == ' ')
+        sentence = sentence + 1;
 
-	if(nb) {
-		char sub_sentence[MAX_INSTRUCTION_LENGTH];
-		i = 0;
+    if(nb) {
+        char sub_sentence[MAX_INSTRUCTION_LENGTH];
+        i = 0;
 
-		while (sentence[i] != ';') {
-			sub_sentence[i] = sentence[i];
-			i++;
-		}
+        while (sentence[i] != ';') {
+            sub_sentence[i] = sentence[i];
+            i++;
+        }
 
-		//S'il y a un espace à la fin on le supprime
-		if (sentence[i - 1] == ' ') {
-			sub_sentence[i - 1] = '\0';
-		} else {
-			sub_sentence[i] = '\0';
-		}
+        //S'il y a un espace à la fin on le supprime
+        if (sentence[i - 1] == ' ') {
+            sub_sentence[i - 1] = '\0';
+        } else {
+            sub_sentence[i] = '\0';
+        }
 
-		//On teste s'il y a un &&
-		if (numberOfOccurences(sub_sentence, '&') > 1) {
-			executeIfFirstSucceeds(sub_sentence);
-		} else {
-			tabSentence = parseSentence(sub_sentence);
-		}
-	} else {
-		//On teste s'il y a un &&
-		if (numberOfOccurences(sentence, '&') > 1) {
-			return executeIfFirstSucceeds(sentence);
-		} else {
-			tabSentence = parseSentence(sentence);
-		}
-	}
+        //On teste s'il y a un &&
+        if (numberOfOccurences(sub_sentence, '&') > 1) {
+            executeIfFirstSucceeds(sub_sentence, errorMode);
+        } else {
+            tabSentence = parseSentence(sub_sentence);
+        }
+    } else {
+        //On teste s'il y a un &&
+        if (numberOfOccurences(sentence, '&') > 1) {
+            return executeIfFirstSucceeds(sentence, errorMode);
+        } else {
+            tabSentence = parseSentence(sentence);
+        }
+    }
 
-	printf("Appel d'analyse\n");
+    //printf("Appel d'analyse\n");
 
-	//Exécution de l'instruction
-	//if(execOperation(tabSentence, errorMode))
-	//	return 0;
+    //Exécution de l'instruction
+    if(execOperation(tabSentence, errorMode))
+        return errno;
 
-	//Appel récursif des autres instructions
-	if (nb && i + 1 < stringLength(sentence)) {
-		analyseInstruction(sentence + i + 1, errorMode);
-	}
+    //Appel récursif des autres instructions
+    if (nb && i + 1 < stringLength(sentence)) {
+        analyseInstruction(sentence + i + 1, errorMode);
+    }
 
-	return 1;
+    return 0;
 }
 
 //Fonction &&
 int executeIfFirstSucceeds(char* sentence, int errorMode) {
-	const char delimiter[2] = "&&";
-	char* command;
+    //const char delimiter[3] = "&&";
+    //char* command;
 
-	command = strtok(sentence, delimiter);
+    //command = strtok(temp, delimiter);
 
-	if(analyseInstruction(command, errorMode)) {
-		command = strtok(sentence, delimiter);
-		return analyseInstruction(command, errorMode);
-	} else {
-		return 0;
-	}
+    int n = stringLength(sentence);
+    char sub_sentence[n];
+    int i = 0;
+
+    while (!(sentence[i]=='&' && sentence[i+1]=='&')) {
+        sub_sentence[i] = sentence[i];
+        i++;
+    }
+
+    if(!analyseInstruction(sub_sentence, errorMode)) {
+        //command = strtok(NULL, delimiter);
+        i = i+2;
+        int j = 0;
+        //char sub_sentence2[n];
+        while (i+j<n) {
+            sub_sentence[j] = sentence[i+j];
+            j++;
+        }
+        sub_sentence[j] = '\0';
+        return analyseInstruction(sub_sentence, errorMode);
+    } else {
+        return errno;
+    }
 }
 
 char* getInstruction(char* sentence) {
-	char* endOfLine = NULL;
+    char* endOfLine = NULL;
 
-	if(fgets(sentence, MAX_INSTRUCTION_LENGTH, stdin) != NULL) {
-		endOfLine = strchr(sentence, '\n');
+    if(fgets(sentence, MAX_INSTRUCTION_LENGTH, stdin) != NULL) {
+        endOfLine = strchr(sentence, '\n');
 
-		if(endOfLine != NULL)
-			*endOfLine = '\0';
+        if(endOfLine != NULL)
+            *endOfLine = '\0';
 
-		return sentence;
-	} else return NULL;
+        return sentence;
+    } else return NULL;
 }
 
 int main(int argc, char** argv) {
-	char sentence[MAX_INSTRUCTION_LENGTH];
-	const char* user = getenv("USERNAME");
-	char host[MAX_HOST_LENGTH];
-	char path[MAX_PATH_LENGTH];
-	int errorMode = 0;
-	int readLineMode = 0;
-	int status = 1;
-	int count = 0;
-	int posErrorMode = 0;
+    char sentence[MAX_INSTRUCTION_LENGTH];
+    const char* user = getenv("USERNAME");
+    char host[MAX_HOST_LENGTH];
+    char path[MAX_PATH_LENGTH];
+    int errorMode = 0;
+    //int readLineMode = 0;
+    int status = 0;
+    int count = 0;
+    int posErrorMode = 0;
 
-    //gethostname(host, MAX_HOST_LENGTH);
-    chdir(getenv("USERPROFILE"));			//chdir(getenv("HOME"));
+    gethostname(host, MAX_HOST_LENGTH);
+    chdir(getenv("HOME"));
 
     if(argc > 1) {
-    	for(int i = 1; i < argc; i++) {
-    		if(strcmp(argv[i], "-e")) {
-    			errorMode = 1;
-    			posErrorMode = i;
-    			count++;
-    		}
+        for(int i = 1; i < argc; i++) {
+            if(strcmp(argv[i], "-e")) {
+                errorMode = 1;
+                posErrorMode = i;
+                count++;
+            }
 
-    		if(strcmp(argv[i], "-r")) {
-    			readLineMode = 1;
-    			count++;
-    		}
-    	}
+            if(strcmp(argv[i], "-r")) {
+                //readLineMode = 1;
+                count++;
+            }
+        }
 
-    	if(argc - count == 2) {
-		    FILE* file = NULL;
-		    char line[MAX_LINE_LENGTH] = "";
-    		status = 0;
+        if(argc - count == 2) {
+            FILE* file = NULL;
+            char line[MAX_LINE_LENGTH] = "";
+            status = 0;
 
-    		if(argc == 2)
-    			file = fopen(argv[1], "r");
-    		else {
-    			if(posErrorMode == 1)
-    				file = fopen(argv[2], "r");
-    			else file = fopen(argv[1], "r");
-    		}
+            if(argc == 2)
+                file = fopen(argv[1], "r");
+            else {
+                if(posErrorMode == 1)
+                    file = fopen(argv[2], "r");
+                else file = fopen(argv[1], "r");
+            }
 
-    		file = fopen(argv[2], "r");
+            file = fopen(argv[2], "r");
 
-			if (file != NULL) {
-		        while(fgets(line, MAX_LINE_LENGTH, file) != NULL) {
-		        	strcat(sentence, line);
-		        	strcat(sentence, " ; ");
-		        }
+            if (file != NULL) {
+                while(fgets(line, MAX_LINE_LENGTH, file) != NULL) {
+                    strcat(sentence, line);
+                    strcat(sentence, " ; ");
+                }
 
-		        analyseInstruction(sentence, errorMode);
-			} else printf("Impossible d'ouvrir le fichier %s", argv[2]);
-    	}
+                analyseInstruction(sentence, errorMode);
+            } else printf("Impossible d'ouvrir le fichier %s", argv[2]);
+        }
     }
 
-    while(status) {
-    	getcwd(path, sizeof(path));
-    	printf("%s@%s:%s$ ", user, host, path);
-    	getInstruction(sentence);
+    while(!status) {
+        getcwd(path, sizeof(path));
+        printf("%s@%s:%s$ ", user, host, path);
+        getInstruction(sentence);
 
-    	if(strcmp(sentence, ""))
-    		status = analyseInstruction(sentence, errorMode);
+        if(strcmp(sentence, ""))
+            status = analyseInstruction(sentence, errorMode);
     }
 
     return 0;

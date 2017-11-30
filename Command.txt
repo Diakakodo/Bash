@@ -1,3 +1,11 @@
 & (commande en arrière plan)
 -r (édition interactive de la ligne de commande et gestion de l'historique)
 isatty(0) == 0
+
+< > >>
+|
+||
+&&
+
+A FAIRE : if ' ' -> while ' '
+et      : occurences char -> char*
