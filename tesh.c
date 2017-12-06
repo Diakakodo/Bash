@@ -350,6 +350,29 @@ char* getInstruction(char* sentence) {
     } else return NULL;
 }
 
+char** testMethod(char* sentence) {
+	char* args[2];
+	int i = 0;
+	int j = 0;
+	int n = stringLength(sentence);
+	char arg1[n];
+	char arg2[n];
+
+	while (i < n-1 && !(sentence[i]=='&' && sentence[i+1]=='&')) {
+		arg1[i] = sentence[i];
+		i++ ;
+	}
+
+	i=i+2;
+
+	while (i+j < n) {
+		arg2[j] = sentence[i+j];
+		j++;
+	}
+
+	return args;
+}
+
 int main(int argc, char** argv) {
     char sentence[MAX_INSTRUCTION_LENGTH];
     const char* user = getenv("USERNAME");
@@ -409,8 +432,11 @@ int main(int argc, char** argv) {
         printf("%s@%s:%s$ ", user, host, path);
         getInstruction(sentence);
 
-        if(strcmp(sentence, ""))
+        if(strcmp(sentence, "")) {
             status = analyseInstruction(sentence, errorMode);
+    		char** args = testMethod(sentence);
+    		printf("%s\n%s\n",args[0],args[1]);
+        }
     }
 
     return 0;
