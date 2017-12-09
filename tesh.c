@@ -17,7 +17,7 @@
 char* builtin[] = {"cd", "exit"};
 char* operations[] = {"<", ">", ">>", "&&", "||", "|"};
 int (*builtin_func[])(char**, int) = {&cdFonction, &exitFonction};
-int (*logicalsAndPipe_func[])(char**, char**, int) = {&executeIfFirstSucceeds, &logicalOr, &pipeOperation};
+int (*logicalsAndPipe_func[])(char*, char*, int) = {&executeIfFirstSucceeds, &logicalOr, &pipeOperation};
 
 int nbBuiltins() {
     return sizeof(builtin) / sizeof(char*);
@@ -96,7 +96,7 @@ int readOrCreateFile(char* symbol, char** args1, char** args2, int errorMode) {
 }
 
 // |
-int pipeOperation(char** args1, char** args2, int errorMode) {
+int pipeOperation(char* args1, char* args2, int errorMode) {
     int fd[2];
     pid_t pid;
     pipe(fd);
@@ -109,11 +109,11 @@ int pipeOperation(char** args1, char** args2, int errorMode) {
         dup2(fd[1], 1);
         close(fd[0]);
         close(fd[1]);
-        execvp(args1[0], args1);
+        execute(args1, errorMode);
 
         if(errorMode)
             return errno;
-        else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+        else fprintf(stderr, "Failed to execute %s\n", args1);
     }
 
     if((pid = fork()) < 0) {
@@ -124,11 +124,12 @@ int pipeOperation(char** args1, char** args2, int errorMode) {
         dup2(fd[0], 0);
         close(fd[0]);
         close(fd[1]);
-        execvp(args1[0], args1);
+        char** tabSentence = parseSentence(args2);
+        execvp(tabSentence[0], tabSentence);
 
         if(errorMode)
             return errno;
-        else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+        else fprintf(stderr, "Failed to execute %s\n", tabSentence[0]);
     }
 
     wait(NULL);
@@ -138,48 +139,21 @@ int pipeOperation(char** args1, char** args2, int errorMode) {
 }
 
 // ||
-int logicalOr(char** args1, char** args2, int errorMode) {
-    int status;
-    pid_t pid;
-
-    if((pid = fork()) < 0) {
-        if(errorMode)
-            return errno;
-        else perror("fork failed");
-    } else if(pid == 0) {
-        execvp(args1[0], args1);
-
-        if(errorMode)
-            return errno;
-        else fprintf(stderr, "Failed to execute %s\n", args1[0]);
+int logicalOr(char* args1, char* args2, int errorMode) {
+    if(execute(args1, errorMode))
+        return analyseInstruction(args2, errorMode);
+    else {
+        return errno;
     }
-
-    wait(&status);
-
-    if(WIFEXITED(status) && (WEXITSTATUS(status) != 0)) {
-        if((pid = fork()) < 0) {
-            if(errorMode)
-                return errno;
-            else perror("fork failed");
-        } else if(pid == 0) {
-            execvp(args1[0], args1);
-
-            if(errorMode)
-                return errno;
-            else fprintf(stderr, "Failed to execute %s\n", args1[0]);
-        }
-    }
-
-    wait(NULL);
-
-    return 0;
 }
 
 //Fonction &&
-int executeIfFirstSucceeds(char** args1, char** args2, int errorMode) {
-    if(!analyseInstruction(*args1, errorMode))
-        return analyseInstruction(*args2, errorMode);
-    else return errno;
+int executeIfFirstSucceeds(char* args1, char* args2, int errorMode) {
+    if(!execute(args1, errorMode))
+        return analyseInstruction(args2, errorMode);
+    else {
+        return errno;
+    }
 }
 
 //Renvoie le nombre d'occurences de car dans string
@@ -199,10 +173,14 @@ char** parseSentence(char* sentence) {
     const char delimiter[2] = " ";
     char* word;
     int count = 0;
+        //printf("%s\n", sentence);
 
     word = strtok(sentence, delimiter);
+    //printf("%s\n", sentence);
 
     while(word != NULL) {
+        //printf("%s\n", word);
+
         tabSentence[count] = word;
 
         count++;
@@ -228,7 +206,10 @@ int execOperation(char** args, int errorMode) {
 
         if(errorMode)
             return errno;
-        else fprintf(stderr, "Failed to execute %s\n", args[0]);
+        else {
+            fprintf(stderr, "Failed to execute %s\n", args[0]);
+            return exitFonction(args, errorMode);
+        }
     } else {
         do {
             waitpid(pid, &status, WUNTRACED);
@@ -241,7 +222,6 @@ int execOperation(char** args, int errorMode) {
 int analyseInstruction(char* sentence, int errorMode) {
     //Création du tableau des mots
     char** tabSentence;
-    int i;
 
     //S'il y a des espaces au début on les supprime
     while(sentence[0] == ' ') {sentence = sentence + 1;}
@@ -254,12 +234,14 @@ int analyseInstruction(char* sentence, int errorMode) {
         if(strcmp(tabSentence[0], builtin[i]) == 0)
             return (*builtin_func[i])(tabSentence, errorMode);
 
+    //printf("%s\n", tabSentence[0]);
+
     //On cherche les booléens
-    if(tabSentence[1] == NULL) {
-        if(strcmp(tabSentence[0], "false") == 0)
-            return 10;
-        else if(strcmp(tabSentence[0], "true") == 0)
-            return 0;
+    if(strcmp(tabSentence[0], "false") == 0) {
+        return 10;
+    }
+    else if(strcmp(tabSentence[0], "true") == 0) {
+        return 0;
     }
 
     //Exécution de l'instruction
@@ -340,17 +322,17 @@ int testMethod(char* sentence, char args1[100], char args2[100]) {
     int n = strlen(sentence);
     int i = n-1;
     int op;
-    int nbOperations = nbOperations();
+    int nbOp = nbOperations();
     int bool = 1;
     char arg1[n];
     char arg2[n];
 
     while (i >= 0 && bool) {
         op = 0;
-        while (op<nbOperations && !isSubstringHere(sentence, operations[op], i)) {
+        while (op<nbOp && !isSubstringHere(sentence, operations[op], i)) {
             op++;
         }
-        bool = op==nbOperations;
+        bool = op==nbOp;
         if (bool) {
             i-- ;
         }
@@ -358,27 +340,38 @@ int testMethod(char* sentence, char args1[100], char args2[100]) {
 
     //Si on n'a pas trouvé les symboles d'opérations on le signale en renvoyant 0
     if (i==-1) {
-        return 0;
+        return -1;
     }
 
-    //Sinon, on modifie args1 et args2
+    //Sinon, on modifie args1 et args2 après avoir différencié | et ||
     else {
+        if (op == 5 && i>0 && sentence[i-1] == '|') {
+            op = 4;
+            i--;
+        }
         int j = 0;
+        int m = strlen(operations[op]);
 
-        while (i+j+1 < n) {
-            arg2[j] = sentence[i+j+1];
+        while (i+j+m < n) {
+            arg2[j] = sentence[i+j+m];
             j++;
         }
 
+        arg2[j] = '\0';
+
         j = 0;
 
-           while (j <= i-stringLength(operations[op])) {
+           while (j <= i-m) {
                arg1[j] = sentence[j];
                j++;
            }
 
+           arg1[j] = '\0';
+
            strcpy(args1, arg1);
            strcpy(args2, arg2);
+
+           //printf("%s\n", args2);
 
            //Et on renvoie l'indice correspondant à l'opération en question
            return op;
@@ -406,7 +399,7 @@ int execute(char* sentence, int errorMode) {
         //On exécute la première instruction
         execute(sub_sentence, errorMode);
         //Appel récursif des autres instructions s'il y en a
-        if (i+1<stringLength(sentence)) {execute(sentence+i+1, errorMode);}
+        if (i+1<strlen(sentence)) {execute(sentence+i+1, errorMode);}
     }
 
     //On cherche les caractères correspondant aux opérations qu'on traite à part
@@ -416,13 +409,13 @@ int execute(char* sentence, int errorMode) {
         int op = testMethod(sentence, arg1, arg2);
 
         //Si on n'en a pas trouvé, on appelle la procédure générale
-        if(op == 0) {
+        if(op == -1) {
             return analyseInstruction(sentence, errorMode);
         } else { //Sinon on appelle la fonction qui gère ce symbole
             if (op < 3) {
-                return readOrCreateFile(operations[op], &arg1, &arg2, errorMode);
+                return 0; //readOrCreateFile(operations[op], arg1, arg2, errorMode);
             } else {
-                return logicalsAndPipe_func[op - 3](&arg1, &arg2, errorMode);
+                return logicalsAndPipe_func[op - 3](arg1, arg2, errorMode);
             }
         }
     }
