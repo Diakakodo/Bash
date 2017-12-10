@@ -1,4 +1,5 @@
-CC=gcc
-CFLAGS=-Wall
+tesh: tesh.o
+	gcc -Wall -std=gnu99 -o tesh tesh.o -ldl
 
-all: tesh
+tesh.o: tesh.c
+	gcc -Wall -std=gnu99 -c tesh.c -o tesh.o
