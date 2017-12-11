@@ -17,7 +17,7 @@
 char* builtin[] = {"cd", "exit"};
 char* operations[] = {"<", ">", ">>", "&&", "||", "|"};
 int (*builtin_func[])(char**, int) = {&cdFonction, &exitFonction};
-int (*logicalsAndPipe_func[])(char*, char*, int) = {&executeIfFirstSucceeds, &logicalOr, &pipeOperation};
+int (*logicalsAndPipe_func[])(char*, char*, int, int*) = {&executeIfFirstSucceeds, &logicalOr, &pipeOperation};
 
 int nbBuiltins() {
 	return sizeof(builtin) / sizeof(char*);
@@ -96,7 +96,7 @@ int readOrCreateFile(char* symbol, char** args1, char** args2, int errorMode) {
 }
 
 // |
-int pipeOperation(char* args1, char* args2, int errorMode) {
+int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
 	int fd[2];
 	pid_t pid;
 	pipe(fd);
@@ -109,7 +109,7 @@ int pipeOperation(char* args1, char* args2, int errorMode) {
 		dup2(fd[1], 1);
 		close(fd[0]);
 		close(fd[1]);
-		execute(args1, errorMode);
+		execute(args1, errorMode, returnCode);
 
 		if(errorMode)
 			return errno;
@@ -139,18 +139,24 @@ int pipeOperation(char* args1, char* args2, int errorMode) {
 }
 
 // ||
-int logicalOr(char* args1, char* args2, int errorMode) {
-	if(execute(args1, errorMode))
-		return analyseInstruction(args2, errorMode);
+int logicalOr(char* args1, char* args2, int errorMode, int* returnCode) {
+	execute(args1, errorMode, returnCode);
+	if(!*returnCode) {
+		*returnCode = 1;
+		return analyseInstruction(args2, errorMode, returnCode);
+	}
 	else {
 		return errno;
 	}
 }
 
 //Fonction &&
-int executeIfFirstSucceeds(char* args1, char* args2, int errorMode) {
-	if(!execute(args1, errorMode))
-		return analyseInstruction(args2, errorMode);
+int executeIfFirstSucceeds(char* args1, char* args2, int errorMode, int* returnCode) {
+	//printf("args1: %s, args2: %s, returnCode: %d\n", args1, args2, *returnCode);
+	execute(args1, errorMode, returnCode);
+	//printf("args1: %s, args2: %s, returnCode: %d\n", args1, args2, *returnCode);
+	if(*returnCode)
+		return analyseInstruction(args2, errorMode, returnCode);
 	else {
 		return errno;
 	}
@@ -219,7 +225,7 @@ int execOperation(char** args, int errorMode) {
 	return 0;
 }
 
-int analyseInstruction(char* sentence, int errorMode) {
+int analyseInstruction(char* sentence, int errorMode, int* returnCode) {
 	//Création du tableau des mots
 	char** tabSentence;
 
@@ -234,13 +240,16 @@ int analyseInstruction(char* sentence, int errorMode) {
 		if(strcmp(tabSentence[0], builtin[i]) == 0)
 			return (*builtin_func[i])(tabSentence, errorMode);
 
-	//printf("%s\n", tabSentence[0]);
+	//printf("tabSentence[0]: %s\n", tabSentence[0]);
 
 	//On cherche les booléens
 	if(strcmp(tabSentence[0], "false") == 0) {
+		*returnCode = 0;
+		//printf("returnCode: %d\n", *returnCode);
 		return 10;
 	}
 	else if(strcmp(tabSentence[0], "true") == 0) {
+		*returnCode = 1;
 		return 0;
 	}
 
@@ -277,7 +286,7 @@ int getInstruction(char* sentence, int readLineMode, void* handle) {
 	return 0;
 }
 
-int readFromFile(int argc, char** argv, int count, int posErrorMode, int status, int errorMode) {
+int readFromFile(int argc, char** argv, int count, int posErrorMode, int status, int errorMode, int* returnCode) {
 	if(argc - count == 2) {
 		FILE* file = NULL;
 		char *endOfLine = NULL;
@@ -295,7 +304,7 @@ int readFromFile(int argc, char** argv, int count, int posErrorMode, int status,
 				if((endOfLine = strchr(line, '\n')) != NULL)
 					*endOfLine = '\0';
 
-				status = execute(line, errorMode);
+				status = execute(line, errorMode, returnCode);
 			}
 
 			if(strcmp(line, "") != 0)
@@ -359,15 +368,16 @@ int testMethod(char* sentence, char args1[100], char args2[100]) {
 			j++;
 		}
 
+		arg2[j] = '\0';
+
 		j = 0;
 
-		while(j <= i - m) {
+		while(j < i) {
 			arg1[j] = sentence[j];
 			j++;
 		}
 
 		arg1[j] = '\0';
-		arg2[j] = '\0';
 
 		strcpy(args1, arg1);
 		strcpy(args2, arg2);
@@ -377,7 +387,7 @@ int testMethod(char* sentence, char args1[100], char args2[100]) {
 	}
 }
 
-int execute(char* sentence, int errorMode) {
+int execute(char* sentence, int errorMode, int* returnCode) {
 	//On commence par traiter les ;
 	int bool = isInString(sentence, ';');
 
@@ -398,21 +408,21 @@ int execute(char* sentence, int errorMode) {
 		sub_sentence[i - j + 1] = '\0';
 
 		//On exécute la première instruction
-		execute(sub_sentence, errorMode);
+		execute(sub_sentence, errorMode, returnCode);
 		//Appel récursif des autres instructions s'il y en a
 		if(i + 1 < strlen(sentence))
-			execute(sentence+i+1, errorMode);
+			execute(sentence+i+1, errorMode, returnCode);
 	} else { //On cherche les caractères correspondant aux opérations qu'on traite à part
 		char arg1[100], arg2[100];
 		int op = testMethod(sentence, arg1, arg2);
 
 		//Si on n'en a pas trouvé, on appelle la procédure générale
 		if(op == -1)
-			return analyseInstruction(sentence, errorMode);
+			return analyseInstruction(sentence, errorMode, returnCode);
 		else { //Sinon on appelle la fonction qui gère ce symbole
 			if(op < 3)
 				return 0; //readOrCreateFile(operations[op], arg1, arg2, errorMode);
-			else return logicalsAndPipe_func[op - 3](arg1, arg2, errorMode);
+			else return logicalsAndPipe_func[op - 3](arg1, arg2, errorMode, returnCode);
 		}
 	}
 	return 0;
@@ -432,6 +442,7 @@ int main(int argc, char** argv) {
 	int count = 0;
 	int posErrorMode = 0;
 	int firstNonTerminal = 1;
+	int returnCode = 1;
 
 	gethostname(host, MAX_HOST_LENGTH);
 
@@ -459,7 +470,7 @@ int main(int argc, char** argv) {
 			}
 		}
 
-		status = readFromFile(argc, argv, count, posErrorMode, status, errorMode);
+		status = readFromFile(argc, argv, count, posErrorMode, status, errorMode, &returnCode);
 	}
 
 	while((!status || status == 10) && firstNonTerminal) {
@@ -473,7 +484,8 @@ int main(int argc, char** argv) {
 		status = getInstruction(sentence, readLineMode, handle);
 
 		if(sentence && *sentence)
-			status = execute(sentence, errorMode);
+			returnCode = 1;
+			status = execute(sentence, errorMode, &returnCode);
 	}
 
 	if(sentence)
