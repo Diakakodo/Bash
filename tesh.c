@@ -45,51 +45,69 @@ int exitFonction(char** args, int errorMode) {
 	return 1;
 }
 
+void viderBuffer() {
+    int c = 0;
+    while (c != '\n' && c != EOF)
+    {
+        c = getchar();
+    }
+}
+
 // < > >>
-int readOrCreateFile(char* symbol, char** args1, char** args2, int errorMode) {
+int readOrCreateFile(char* symbol, char* args1, char* args2, int errorMode, int* returnCode) {
 	pid_t pid;
 	int fd;
+	
+	while (args2[0] == ' ') {
+		args2 = args2+1;
+	}
 
 	if((pid = fork()) < 0) {
 		if(errorMode)
 			return errno;
 		else perror("fork failed");
+		
 	} else if(pid == 0) {
-		if(symbol[0] == '<') {
-			if((fd = open(*args2, O_RDONLY, 0)) < 0) {
+		
+		if(strcmp(symbol,"<") == 0) {
+			
+			if((fd = open(args2, O_RDONLY, 0)) < 0) {
 				if(errorMode)
 					return errno;
 				else perror("open failed");
 			}
-
 			dup2(fd, 0);
-		} else if(symbol[0] == '>') {
-			if((fd = creat(*args2, O_WRONLY)) < 0) {
+			
+		} else if(strcmp(symbol,">") == 0) {
+			
+			if((fd = creat(args2, 0644)) < 0) {
 				if(errorMode)
 					return errno;
 				else perror("creat failed");
 			}
-
 			dup2(fd, 1);
-		} else if(strcmp(symbol, ">>")) {
-			if((fd = open(*args2, O_WRONLY | O_APPEND)) < 0) {
+			
+		} else if(strcmp(symbol, ">>") == 0) {
+			
+			if((fd = open(args2, O_WRONLY | O_APPEND)) < 0) {
 				if(errorMode)
 					return errno;
 				else perror("open failed");
 			}
-
 			dup2(fd, 1);
 		}
-
+		
 		close(fd);
-		execvp(args1[0], args1);
+		
+		execute(args1, errorMode, returnCode);
+		
+		dup2(0,0);
+		dup2(1,1);
+		
+		return errno;
 
-		if(errorMode)
-			return errno;
-		else fprintf(stderr, "Failed to execute %s\n", args1[0]);
 	} else {
 		waitpid(pid, 0, 0);
-		free(args1);
 	}
 
 	return 0;
@@ -105,33 +123,25 @@ int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
 		if(errorMode)
 			return errno;
 		else perror("fork failed");
-	} else if(pid == 0) {
+	}
+	
+	if(pid == 0) {
 		dup2(fd[1], 1);
 		close(fd[0]);
 		close(fd[1]);
 		execute(args1, errorMode, returnCode);
-
-		if(errorMode)
-			return errno;
-		else fprintf(stderr, "Failed to execute %s\n", args1);
-	}
-
-	if((pid = fork()) < 0) {
-		if(errorMode)
-			return errno;
-		else perror("fork failed");
-	} else if(pid == 0) {
+		
+		return errno;
+	} else {
 		dup2(fd[0], 0);
 		close(fd[0]);
 		close(fd[1]);
 		char** tabSentence = parseSentence(args2);
 		execvp(tabSentence[0], tabSentence);
-
-		if(errorMode)
-			return errno;
-		else fprintf(stderr, "Failed to execute %s\n", tabSentence[0]);
+		
+		return errno;
 	}
-
+	
 	wait(NULL);
 	wait(NULL);
 
@@ -141,13 +151,11 @@ int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
 // ||
 int logicalOr(char* args1, char* args2, int errorMode, int* returnCode) {
 	execute(args1, errorMode, returnCode);
+	
 	if(!*returnCode) {
 		*returnCode = 1;
 		return analyseInstruction(args2, errorMode, returnCode);
-	}
-	else {
-		return errno;
-	}
+	} else return 0;
 }
 
 //Fonction &&
@@ -158,7 +166,7 @@ int executeIfFirstSucceeds(char* args1, char* args2, int errorMode, int* returnC
 	if(*returnCode)
 		return analyseInstruction(args2, errorMode, returnCode);
 	else {
-		return errno;
+		return 0;
 	}
 }
 
@@ -167,9 +175,9 @@ int isInString(char* string, char car) {
 	int n = strlen(string);
 	int i = 0;
 
-	while (i<n && string[i]!=car) {i++;}
+	while (i < n && string[i] != car) {i++;}
 
-	return i!=n;
+	return i != n;
 }
 
 // On met les commandes et arguments dans un tableau
@@ -246,6 +254,7 @@ int analyseInstruction(char* sentence, int errorMode, int* returnCode) {
 	if(strcmp(tabSentence[0], "false") == 0) {
 		*returnCode = 0;
 		//printf("returnCode: %d\n", *returnCode);
+		
 		return 10;
 	}
 	else if(strcmp(tabSentence[0], "true") == 0) {
@@ -278,10 +287,8 @@ int getInstruction(char* sentence, int readLineMode, void* handle) {
 			*endOfLine = '\0';
 	}
 
-	if(feof(stdin)) {
-		printf("\n");
+	if(feof(stdin))
 		return 1;
-	}
 
 	return 0;
 }
@@ -300,7 +307,7 @@ int readFromFile(int argc, char** argv, int count, int posErrorMode, int status,
 		file = fopen(argv[filePos], "r");
 
 		if(file != NULL) {
-			while(fgets(line, MAX_LINE_LENGTH, file) != NULL && !status) {
+			while(fgets(line, MAX_LINE_LENGTH, file) != NULL && (!status || (status == 10 && !errorMode))) {
 				if((endOfLine = strchr(line, '\n')) != NULL)
 					*endOfLine = '\0';
 
@@ -359,10 +366,16 @@ int testMethod(char* sentence, char args1[100], char args2[100]) {
 			op = 4;
 			i--;
 		}
-
+		else if (op == 1 && i > 0 && sentence[i - 1] == '>') {
+			op = 2;
+			i--;
+		}
+		
+		//printf("Operation detectee : %s\n", operations[op]);
+		
 		int j = 0;
 		int m = strlen(operations[op]);
-
+		
 		while(i + j + m < n) {
 			arg2[j] = sentence[i + j + m];
 			j++;
@@ -381,6 +394,8 @@ int testMethod(char* sentence, char args1[100], char args2[100]) {
 
 		strcpy(args1, arg1);
 		strcpy(args2, arg2);
+		
+		//printf("args1 : %s\nargs2 : %s", args1, args2);
 
 		//Et on renvoie l'indice correspondant à l'opération en question
 		return op;
@@ -421,7 +436,7 @@ int execute(char* sentence, int errorMode, int* returnCode) {
 			return analyseInstruction(sentence, errorMode, returnCode);
 		else { //Sinon on appelle la fonction qui gère ce symbole
 			if(op < 3)
-				return 0; //readOrCreateFile(operations[op], arg1, arg2, errorMode);
+				return readOrCreateFile(operations[op], arg1, arg2, errorMode, returnCode);
 			else return logicalsAndPipe_func[op - 3](arg1, arg2, errorMode, returnCode);
 		}
 	}
@@ -441,7 +456,6 @@ int main(int argc, char** argv) {
 	int status = 0;
 	int count = 0;
 	int posErrorMode = 0;
-	int firstNonTerminal = 1;
 	int returnCode = 1;
 
 	gethostname(host, MAX_HOST_LENGTH);
@@ -455,7 +469,7 @@ int main(int argc, char** argv) {
 			}
 
 			if(strcmp(argv[i], "-r") == 0) {
-				if(!(handle = dlopen("libreadline.so.6", RTLD_LAZY | RTLD_LOCAL))) {
+				if(!(handle = dlopen("libreadline.so", RTLD_LAZY | RTLD_LOCAL))) {
 					fputs(dlerror(), stderr);
 					status = 1;
 				}
@@ -473,19 +487,19 @@ int main(int argc, char** argv) {
 		status = readFromFile(argc, argv, count, posErrorMode, status, errorMode, &returnCode);
 	}
 
-	while((!status || status == 10) && firstNonTerminal) {
+	while(!status || (status == 10 && !errorMode)) {
 		getcwd(path, sizeof(path));
 
 		if(isatty(fileno(stdin)))
 			printf("%s@%s:%s$ ", user, host, path);
-		else firstNonTerminal = 0;
 
 		memset(sentence, 0, MAX_INSTRUCTION_LENGTH * sizeof(char));
 		status = getInstruction(sentence, readLineMode, handle);
 
-		if(sentence && *sentence)
+		if(strlen(sentence) != 0) {
 			returnCode = 1;
 			status = execute(sentence, errorMode, &returnCode);
+		}
 	}
 
 	if(sentence)
