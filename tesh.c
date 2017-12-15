@@ -57,7 +57,7 @@ void viderBuffer() {
 int readOrCreateFile(char* symbol, char* args1, char* args2, int errorMode, int* returnCode) {
 	pid_t pid;
 	int fd;
-	
+
 	while (args2[0] == ' ') {
 		args2 = args2+1;
 	}
@@ -70,14 +70,13 @@ int readOrCreateFile(char* symbol, char* args1, char* args2, int errorMode, int*
 	} else if(pid == 0) {
 		
 		if(strcmp(symbol,"<") == 0) {
-			
 			if((fd = open(args2, O_RDONLY, 0)) < 0) {
 				if(errorMode)
 					return errno;
 				else perror("open failed");
 			}
 			dup2(fd, 0);
-			
+
 		} else if(strcmp(symbol,">") == 0) {
 			
 			if((fd = creat(args2, 0644)) < 0) {
@@ -99,11 +98,11 @@ int readOrCreateFile(char* symbol, char* args1, char* args2, int errorMode, int*
 		
 		close(fd);
 		
-		execute(args1, errorMode, returnCode);
+		execute(args1, errorMode, returnCode, 0);
 		
 		dup2(0,0);
 		dup2(1,1);
-		
+
 		return errno;
 
 	} else {
@@ -124,21 +123,22 @@ int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
 			return errno;
 		else perror("fork failed");
 	}
-	
+
 	if(pid == 0) {
 		dup2(fd[1], 1);
 		close(fd[0]);
 		close(fd[1]);
-		execute(args1, errorMode, returnCode);
-		
+		//fprintf(stderr, "args1 = %s\n", args1);
+		execute(args1, errorMode, returnCode, 0);
 		return errno;
 	} else {
+		waitpid(pid, 0, 0);
 		dup2(fd[0], 0);
 		close(fd[0]);
 		close(fd[1]);
 		char** tabSentence = parseSentence(args2);
+		//fprintf(stderr, "args2 = %s\n", args2);
 		execvp(tabSentence[0], tabSentence);
-		
 		return errno;
 	}
 	
@@ -150,21 +150,18 @@ int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
 
 // ||
 int logicalOr(char* args1, char* args2, int errorMode, int* returnCode) {
-	execute(args1, errorMode, returnCode);
-	
+	execute(args1, errorMode, returnCode, 1);
 	if(!*returnCode) {
 		*returnCode = 1;
-		return analyseInstruction(args2, errorMode, returnCode);
+		return analyseInstruction(args2, errorMode, returnCode, 1);
 	} else return 0;
 }
 
 //Fonction &&
 int executeIfFirstSucceeds(char* args1, char* args2, int errorMode, int* returnCode) {
-	//printf("args1: %s, args2: %s, returnCode: %d\n", args1, args2, *returnCode);
-	execute(args1, errorMode, returnCode);
-	//printf("args1: %s, args2: %s, returnCode: %d\n", args1, args2, *returnCode);
+	execute(args1, errorMode, returnCode, 1);
 	if(*returnCode)
-		return analyseInstruction(args2, errorMode, returnCode);
+		return analyseInstruction(args2, errorMode, returnCode, 1);
 	else {
 		return 0;
 	}
@@ -207,16 +204,33 @@ char** parseSentence(char* sentence) {
 }
 
 //On exécute la commande qui n'est pas un symbole
-int execOperation(char** args, int errorMode) {
-	pid_t pid;
-	int status;
+int execOperation(char** args, int errorMode, int doPipe) {
+	if (doPipe) {
+		pid_t pid;
+		int status;
 
-	if((pid = fork()) < 0) {
-		if(errorMode)
-			return errno;
-		else perror("fork failed");
-	} else if(pid == 0) {
+		if((pid = fork()) < 0) {
+			if(errorMode)
+				return errno;
+			else perror("fork failed");
+		} else if(pid == 0) {
+			execvp(args[0], args);
+
+			if(errorMode)
+				return errno;
+			else {
+				fprintf(stderr, "Failed to execute %s\n", args[0]);
+				return exitFonction(args, errorMode);
+			}
+		} else {
+			do {
+				waitpid(pid, &status, WUNTRACED);
+			} while(!WIFEXITED(status) && !WIFSIGNALED(status));
+		}
+	} else {
 		execvp(args[0], args);
+
+		printf("Haha\n");
 
 		if(errorMode)
 			return errno;
@@ -224,16 +238,12 @@ int execOperation(char** args, int errorMode) {
 			fprintf(stderr, "Failed to execute %s\n", args[0]);
 			return exitFonction(args, errorMode);
 		}
-	} else {
-		do {
-			waitpid(pid, &status, WUNTRACED);
-		} while(!WIFEXITED(status) && !WIFSIGNALED(status));
 	}
 
 	return 0;
 }
 
-int analyseInstruction(char* sentence, int errorMode, int* returnCode) {
+int analyseInstruction(char* sentence, int errorMode, int* returnCode, int doPipe) {
 	//Création du tableau des mots
 	char** tabSentence;
 
@@ -254,7 +264,6 @@ int analyseInstruction(char* sentence, int errorMode, int* returnCode) {
 	if(strcmp(tabSentence[0], "false") == 0) {
 		*returnCode = 0;
 		//printf("returnCode: %d\n", *returnCode);
-		
 		return 10;
 	}
 	else if(strcmp(tabSentence[0], "true") == 0) {
@@ -263,65 +272,8 @@ int analyseInstruction(char* sentence, int errorMode, int* returnCode) {
 	}
 
 	//Exécution de l'instruction
-	if(execOperation(tabSentence, errorMode))
+	if(execOperation(tabSentence, errorMode, doPipe))
 		return errno;
-
-	return 0;
-}
-
-int getInstruction(char* sentence, int readLineMode, void* handle) {
-	char* endOfLine = NULL;
-	char* (*readFonction)(char*);
-	void* (*addHistory)(char*);
-
-	if(readLineMode) {
-		readFonction = dlsym(handle, "readLine");
-		addHistory = dlsym(handle, "add_history");
-
-		if((sentence = readFonction("")))
-			addHistory(sentence);
-
-		dlclose(handle);
-	} else if(fgets(sentence, MAX_INSTRUCTION_LENGTH, stdin) != NULL) {
-		if((endOfLine = strchr(sentence, '\n')) != NULL)
-			*endOfLine = '\0';
-	}
-
-	if(feof(stdin))
-		return 1;
-
-	return 0;
-}
-
-int readFromFile(int argc, char** argv, int count, int posErrorMode, int status, int errorMode, int* returnCode) {
-	if(argc - count == 2) {
-		FILE* file = NULL;
-		char *endOfLine = NULL;
-		int filePos = 1;
-
-		char* line = malloc(MAX_LINE_LENGTH * sizeof(char));
-
-		if(argc != 2 && posErrorMode == 1)
-			filePos = 2;
-
-		file = fopen(argv[filePos], "r");
-
-		if(file != NULL) {
-			while(fgets(line, MAX_LINE_LENGTH, file) != NULL && (!status || (status == 10 && !errorMode))) {
-				if((endOfLine = strchr(line, '\n')) != NULL)
-					*endOfLine = '\0';
-
-				status = execute(line, errorMode, returnCode);
-			}
-
-			if(strcmp(line, "") != 0)
-				free(line);
-
-			fclose(file);
-		} else printf("Impossible d'ouvrir le fichier %s", argv[filePos]);
-
-		return 1;
-	}
 
 	return 0;
 }
@@ -394,15 +346,13 @@ int testMethod(char* sentence, char args1[100], char args2[100]) {
 
 		strcpy(args1, arg1);
 		strcpy(args2, arg2);
-		
-		//printf("args1 : %s\nargs2 : %s", args1, args2);
 
 		//Et on renvoie l'indice correspondant à l'opération en question
 		return op;
 	}
 }
 
-int execute(char* sentence, int errorMode, int* returnCode) {
+int execute(char* sentence, int errorMode, int* returnCode, int doPipe) {
 	//On commence par traiter les ;
 	int bool = isInString(sentence, ';');
 
@@ -423,23 +373,82 @@ int execute(char* sentence, int errorMode, int* returnCode) {
 		sub_sentence[i - j + 1] = '\0';
 
 		//On exécute la première instruction
-		execute(sub_sentence, errorMode, returnCode);
+		execute(sub_sentence, errorMode, returnCode, doPipe);
+
 		//Appel récursif des autres instructions s'il y en a
-		if(i + 1 < strlen(sentence))
-			execute(sentence+i+1, errorMode, returnCode);
+		if(i + 1 < strlen(sentence)) {
+			execute(sentence+i+1, errorMode, returnCode, doPipe);
+		}
 	} else { //On cherche les caractères correspondant aux opérations qu'on traite à part
 		char arg1[100], arg2[100];
 		int op = testMethod(sentence, arg1, arg2);
 
 		//Si on n'en a pas trouvé, on appelle la procédure générale
 		if(op == -1)
-			return analyseInstruction(sentence, errorMode, returnCode);
+			return analyseInstruction(sentence, errorMode, returnCode, doPipe);
 		else { //Sinon on appelle la fonction qui gère ce symbole
 			if(op < 3)
 				return readOrCreateFile(operations[op], arg1, arg2, errorMode, returnCode);
 			else return logicalsAndPipe_func[op - 3](arg1, arg2, errorMode, returnCode);
 		}
 	}
+	return 0;
+}
+
+int getInstruction(char* sentence, int readLineMode, void* handle) {
+	char* endOfLine = NULL;
+	char* (*readFonction)(char*);
+	void* (*addHistory)(char*);
+
+	if(readLineMode) {
+		readFonction = dlsym(handle, "readLine");
+		addHistory = dlsym(handle, "add_history");
+
+		if((sentence = readFonction("")))
+			addHistory(sentence);
+
+		dlclose(handle);
+	} else if(fgets(sentence, MAX_INSTRUCTION_LENGTH, stdin) != NULL) {
+		if((endOfLine = strchr(sentence, '\n')) != NULL)
+			*endOfLine = '\0';
+	}
+
+	if(feof(stdin))
+		return 1;
+
+	return 0;
+}
+
+int readFromFile(int argc, char** argv, int count, int posErrorMode, int status, int errorMode, int* returnCode) {
+	if(argc - count == 2) {
+		FILE* file = NULL;
+		char *endOfLine = NULL;
+		int filePos = 1;
+
+		char* line = malloc(MAX_LINE_LENGTH * sizeof(char));
+
+		if(argc != 2 && posErrorMode == 1)
+			filePos = 2;
+
+		file = fopen(argv[filePos], "r");
+
+		if(file != NULL) {
+			while(fgets(line, MAX_LINE_LENGTH, file) != NULL && (!status || (status == 10 && !errorMode))) {
+				if((endOfLine = strchr(line, '\n')) != NULL)
+					*endOfLine = '\0';
+
+				status = execute(line, errorMode, returnCode, 1);
+			}
+
+			if(strcmp(line, "") != 0)
+				free(line);
+
+			fclose(file);
+		} else printf("Impossible d'ouvrir le fichier %s", argv[filePos]);
+
+		return 1;
+	}
+
 	return 0;
 }
 
@@ -498,7 +507,7 @@ int main(int argc, char** argv) {
 
 		if(strlen(sentence) != 0) {
 			returnCode = 1;
-			status = execute(sentence, errorMode, &returnCode);
+			status = execute(sentence, errorMode, &returnCode, 1);
 		}
 	}
 
