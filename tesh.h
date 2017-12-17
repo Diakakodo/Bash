@@ -2,12 +2,14 @@
 
 int cdFonction(char**, int);
 int exitFonction(char**, int);
+int fgFonction(char**, int);
 int nbBuiltins();
 int nbLogicalsAndPipe();
 int executeIfFirstSucceeds(char*, char*, int, int*);
 int readOrCreateFile(char*, char*, char*, int, int*);
 int pipeOperation(char*, char*, int, int*);
 int logicalOr(char*, char*, int, int*);
+int bgOperation(char*, char*, int, int*);
 int isInString(char*, char);
 char** parseSentence(char*);
 int execOperation(char**, int, int);

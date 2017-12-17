@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <dlfcn.h>
+#include <signal.h>
 #include "tesh.h"
 
 #define MAX_INSTRUCTION_LENGTH 256
@@ -20,10 +21,13 @@ typedef char* (*readline_t)(const char *);
 static add_history_t add_history;
 static readline_t readline;
 
-char* builtin[] = {"cd", "exit"};
-char* operations[] = {"<", ">", ">>", "&&", "||", "|"};
-int (*builtin_func[])(char**, int) = {&cdFonction, &exitFonction};
-int (*logicalsAndPipe_func[])(char*, char*, int, int*) = {&executeIfFirstSucceeds, &logicalOr, &pipeOperation};
+char* builtin[] = {"cd", "exit", "fg"};
+char* operations[] = {"<", ">", ">>", "&&", "||", "|", "&"};
+int (*builtin_func[])(char**, int) = {&cdFonction, &exitFonction, &fgFonction};
+int (*logicalsAndPipe_func[])(char*, char*, int, int*) = {&executeIfFirstSucceeds, &logicalOr, &pipeOperation, &bgOperation};
+
+pid_t childPid = 0;
+int childReturn;
 
 int nbBuiltins() {
 	return sizeof(builtin) / sizeof(char*);
@@ -49,6 +53,21 @@ int cdFonction(char** args, int errorMode) {
 
 int exitFonction(char** args, int errorMode) {
 	return 1;
+}
+
+int fgFonction(char** args, int pid) {
+	int status;
+
+	if(pid == 0)
+		fprintf(stderr, "No child process");
+	else {
+		kill(pid, SIGKILL);
+
+		while((pid = wait(&status)) != -1)
+			fprintf(stderr, "[%d] -> %d\n", pid, WEXITSTATUS(status));
+	}
+
+	return 0;
 }
 
 // < > >>
@@ -94,48 +113,50 @@ int readOrCreateFile(char* symbol, char* args1, char* args2, int errorMode, int*
 		
 		execute(args1, errorMode, returnCode, 0);
 		
-		dup2(0,0);
-		dup2(1,1);
-
-		return errno;
+		if(errorMode)
+			return errno;
+		else fprintf(stderr, "failed to execute %s\n", args1);
 	} else waitpid(pid, 0, 0);
 
 	return 0;
 }
 
 // |
-int pipeOperation(char* args1, char* args2, int errorMode, int*
-returnCode) {
+int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
+	pid_t pid1, pid2;
 	int fd[2];
-	pid_t pid;
+
 	pipe(fd);
 
-	if((pid = fork()) < 0) {
+	if((pid1 = fork()) < 0) {
 		if(errorMode)
 			return errno;
-		else perror("fork failed");
-	}
-
-	if(pid == 0) {
+		else perror("fork 1 failed");
+	} else if(pid1 == 0) {
 		dup2(fd[1], 1);
 		close(fd[0]);
-		close(fd[1]);
-		//fprintf(stderr, "args1 = %s\n", args1);
 		execute(args1, errorMode, returnCode, 0);
+	}
 
-		return errno;
-	} else {
-		waitpid(pid, 0, 0);
-		dup2(fd[0], 0);
-		close(fd[0]);
-		close(fd[1]);
+	if((pid2 = fork()) < 0) {
+		if(errorMode)
+			return errno;
+		else perror("fork 2 failed");
+	} else if(pid2 == 0) {
 		char** tabSentence = parseSentence(args2);
-		//fprintf(stderr, "args2 = %s\n", args2);
+
+		dup2(fd[0], 0);
+		close(fd[1]);
 		execvp(tabSentence[0], tabSentence);
 
-		return errno;
+		if(errorMode)
+			return errno;
+		else fprintf(stderr, "failed to execute %s\n", tabSentence[0]);
 	}
 	
+	close(fd[0]);
+	close(fd[1]);
+
 	wait(NULL);
 	wait(NULL);
 
@@ -160,6 +181,32 @@ int executeIfFirstSucceeds(char* args1, char* args2, int errorMode, int* returnC
 	if(*returnCode)
 		return analyseInstruction(args2, errorMode, returnCode, 1);
 	else return 0;
+}
+
+//Fonction &
+int bgOperation(char* args1, char* args2, int errorMode, int* returnCode) {
+	pid_t pid;
+
+	if((pid = fork()) < 0) {
+		if(errorMode)
+			return errno;
+		else perror("fork failed");
+	} else if(pid == 0) {
+		//setpgid(0, 0);
+
+
+		if(strcmp(args1, "false") == 0 || strcmp(args1, "true") == 0)
+			childReturn = 0;
+		/*else {
+			childReturn = execute(args1, errorMode, returnCode, 0);
+
+			if(errorMode)
+				return errno;
+			else fprintf(stderr, "failed to execute %s\n", args1);
+		}*/
+	}
+	fprintf(stderr, "[%d]\n", pid);
+	return 0;
 }
 
 //Renvoie le nombre d'occurences de car dans string
@@ -212,7 +259,7 @@ int execOperation(char** args, int errorMode, int doPipe) {
 				return errno;
 			else {
 				fprintf(stderr, "Failed to execute %s\n", args[0]);
-				return exitFonction(args, errorMode);
+				return 1;
 			}
 		} else {
 			do
@@ -221,8 +268,6 @@ int execOperation(char** args, int errorMode, int doPipe) {
 		}
 	} else {
 		execvp(args[0], args);
-
-		printf("Haha\n");
 
 		if(errorMode)
 			return errno;
@@ -247,19 +292,24 @@ int analyseInstruction(char* sentence, int errorMode, int* returnCode, int doPip
 	tabSentence = parseSentence(sentence);
 
 	//On cherche les fonctions builtin
-	for(int i = 0; i < nbBuiltins(); i++)
-		if(strcmp(tabSentence[0], builtin[i]) == 0)
+	for(int i = 0; i < nbBuiltins(); i++) {
+		if(strcmp(tabSentence[0], builtin[i]) == 0) {
+			if(i == 2)
+				return (*builtin_func[i])(tabSentence, childPid);
 			return (*builtin_func[i])(tabSentence, errorMode);
+		}
+	}
 
 	//printf("tabSentence[0]: %s\n", tabSentence[0]);
 
 	//On cherche les booléens
 	if(strcmp(tabSentence[0], "false") == 0) {
 		*returnCode = 0;
-		//printf("returnCode: %d\n", *returnCode);
+
 		return 10;
 	} else if(strcmp(tabSentence[0], "true") == 0) {
 		*returnCode = 1;
+
 		return 0;
 	}
 
@@ -275,7 +325,7 @@ int isSubstringHere(char* sentence, char* subs, int index) {
 	int n = strlen(sentence);
 	int m = strlen(subs);
 
-	while (i < m && i + index < n && sentence[i + index] == subs[i])
+	while(i < m && i + index < n && sentence[i + index] == subs[i])
 		i++;
 
 	return i == m;
@@ -290,7 +340,7 @@ int testMethod(char* sentence, char args1[100], char args2[100]) {
 	char arg1[n];
 	char arg2[n];
 
-	while (i >= 0 && bool) {
+	while(i >= 0 && bool) {
 		op = 0;
 
 		while(op < nbOp && !isSubstringHere(sentence, operations[op], i))
@@ -299,18 +349,21 @@ int testMethod(char* sentence, char args1[100], char args2[100]) {
 		bool = op == nbOp;
 
 		if(bool)
-			i-- ;
+			i--;
 	}
 
 	//Si on n'a pas trouvé les symboles d'opérations on le signale en renvoyant 0
-	if (i == -1)
+	if(i == -1)
 		return -1;
 	else { //Sinon, on modifie args1 et args2 après avoir différencié | et ||
-		if (op == 5 && i > 0 && sentence[i - 1] == '|') {
+		if(op == 5 && i > 0 && sentence[i - 1] == '|') {
 			op = 4;
 			i--;
-		} else if (op == 1 && i > 0 && sentence[i - 1] == '>') {
+		} else if(op == 1 && i > 0 && sentence[i - 1] == '>') {
 			op = 2;
+			i--;
+		} else if(op == 6 && i > 0 && sentence[i - 1] == '&') {
+			op = 3;
 			i--;
 		}
 		
@@ -352,7 +405,7 @@ int execute(char* sentence, int errorMode, int* returnCode, int doPipe) {
 		int i = 0;
 		int j = 1;
 
-		while (sentence[i] != ';') {
+		while(sentence[i] != ';') {
 			sub_sentence[i] = sentence[i];
 			i++;
 		}
@@ -382,6 +435,7 @@ int execute(char* sentence, int errorMode, int* returnCode, int doPipe) {
 			else return logicalsAndPipe_func[op - 3](arg1, arg2, errorMode, returnCode);
 		}
 	}
+
 	return 0;
 }
 
@@ -405,8 +459,9 @@ int getInstruction(char* sentence, char prompt[MAX_PROMPT_LENGTH], int readLineM
 		}
 	} else return 1;
 
-	if(feof(stdin))
+	if(feof(stdin)) {
 		return 1;
+	}
 
 	return 0;
 }
