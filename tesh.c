@@ -14,6 +14,12 @@
 #define MAX_PATH_LENGTH 256
 #define MAX_LINE_LENGTH 512
 
+typedef void (*add_history_t)(char *);
+typedef char* (*readline_t)(const char *);
+
+static add_history_t add_history;
+static readline_t readline;
+
 char* builtin[] = {"cd", "exit"};
 char* operations[] = {"<", ">", ">>", "&&", "||", "|"};
 int (*builtin_func[])(char**, int) = {&cdFonction, &exitFonction};
@@ -45,54 +51,42 @@ int exitFonction(char** args, int errorMode) {
 	return 1;
 }
 
-void viderBuffer() {
-    int c = 0;
-    while (c != '\n' && c != EOF)
-    {
-        c = getchar();
-    }
-}
-
 // < > >>
 int readOrCreateFile(char* symbol, char* args1, char* args2, int errorMode, int* returnCode) {
 	pid_t pid;
 	int fd;
 
-	while (args2[0] == ' ') {
-		args2 = args2+1;
-	}
+	while (args2[0] == ' ')
+		args2 = args2 + 1;
 
 	if((pid = fork()) < 0) {
 		if(errorMode)
 			return errno;
 		else perror("fork failed");
-		
 	} else if(pid == 0) {
-		
 		if(strcmp(symbol,"<") == 0) {
 			if((fd = open(args2, O_RDONLY, 0)) < 0) {
 				if(errorMode)
 					return errno;
 				else perror("open failed");
 			}
-			dup2(fd, 0);
 
+			dup2(fd, 0);
 		} else if(strcmp(symbol,">") == 0) {
-			
 			if((fd = creat(args2, 0644)) < 0) {
 				if(errorMode)
 					return errno;
 				else perror("creat failed");
 			}
+
 			dup2(fd, 1);
-			
 		} else if(strcmp(symbol, ">>") == 0) {
-			
 			if((fd = open(args2, O_WRONLY | O_APPEND)) < 0) {
 				if(errorMode)
 					return errno;
 				else perror("open failed");
 			}
+
 			dup2(fd, 1);
 		}
 		
@@ -104,16 +98,14 @@ int readOrCreateFile(char* symbol, char* args1, char* args2, int errorMode, int*
 		dup2(1,1);
 
 		return errno;
-
-	} else {
-		waitpid(pid, 0, 0);
-	}
+	} else waitpid(pid, 0, 0);
 
 	return 0;
 }
 
 // |
-int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
+int pipeOperation(char* args1, char* args2, int errorMode, int*
+returnCode) {
 	int fd[2];
 	pid_t pid;
 	pipe(fd);
@@ -130,6 +122,7 @@ int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
 		close(fd[1]);
 		//fprintf(stderr, "args1 = %s\n", args1);
 		execute(args1, errorMode, returnCode, 0);
+
 		return errno;
 	} else {
 		waitpid(pid, 0, 0);
@@ -139,6 +132,7 @@ int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
 		char** tabSentence = parseSentence(args2);
 		//fprintf(stderr, "args2 = %s\n", args2);
 		execvp(tabSentence[0], tabSentence);
+
 		return errno;
 	}
 	
@@ -151,8 +145,10 @@ int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
 // ||
 int logicalOr(char* args1, char* args2, int errorMode, int* returnCode) {
 	execute(args1, errorMode, returnCode, 1);
+
 	if(!*returnCode) {
 		*returnCode = 1;
+
 		return analyseInstruction(args2, errorMode, returnCode, 1);
 	} else return 0;
 }
@@ -160,11 +156,10 @@ int logicalOr(char* args1, char* args2, int errorMode, int* returnCode) {
 //Fonction &&
 int executeIfFirstSucceeds(char* args1, char* args2, int errorMode, int* returnCode) {
 	execute(args1, errorMode, returnCode, 1);
+
 	if(*returnCode)
 		return analyseInstruction(args2, errorMode, returnCode, 1);
-	else {
-		return 0;
-	}
+	else return 0;
 }
 
 //Renvoie le nombre d'occurences de car dans string
@@ -172,7 +167,8 @@ int isInString(char* string, char car) {
 	int n = strlen(string);
 	int i = 0;
 
-	while (i < n && string[i] != car) {i++;}
+	while (i < n && string[i] != car)
+		i++;
 
 	return i != n;
 }
@@ -184,14 +180,10 @@ char** parseSentence(char* sentence) {
 	const char delimiter[2] = " ";
 	char* word;
 	int count = 0;
-	//printf("%s\n", sentence);
 
 	word = strtok(sentence, delimiter);
-	//printf("%s\n", sentence);
 
 	while(word != NULL) {
-		//printf("%s\n", word);
-
 		tabSentence[count] = word;
 
 		count++;
@@ -223,9 +215,9 @@ int execOperation(char** args, int errorMode, int doPipe) {
 				return exitFonction(args, errorMode);
 			}
 		} else {
-			do {
+			do
 				waitpid(pid, &status, WUNTRACED);
-			} while(!WIFEXITED(status) && !WIFSIGNALED(status));
+			while(!WIFEXITED(status) && !WIFSIGNALED(status));
 		}
 	} else {
 		execvp(args[0], args);
@@ -248,7 +240,8 @@ int analyseInstruction(char* sentence, int errorMode, int* returnCode, int doPip
 	char** tabSentence;
 
 	//S'il y a des espaces au début on les supprime
-	while(sentence[0] == ' ') {sentence = sentence + 1;}
+	while(sentence[0] == ' ')
+		sentence = sentence + 1;
 
 	//Création du tableau
 	tabSentence = parseSentence(sentence);
@@ -265,8 +258,7 @@ int analyseInstruction(char* sentence, int errorMode, int* returnCode, int doPip
 		*returnCode = 0;
 		//printf("returnCode: %d\n", *returnCode);
 		return 10;
-	}
-	else if(strcmp(tabSentence[0], "true") == 0) {
+	} else if(strcmp(tabSentence[0], "true") == 0) {
 		*returnCode = 1;
 		return 0;
 	}
@@ -317,8 +309,7 @@ int testMethod(char* sentence, char args1[100], char args2[100]) {
 		if (op == 5 && i > 0 && sentence[i - 1] == '|') {
 			op = 4;
 			i--;
-		}
-		else if (op == 1 && i > 0 && sentence[i - 1] == '>') {
+		} else if (op == 1 && i > 0 && sentence[i - 1] == '>') {
 			op = 2;
 			i--;
 		}
@@ -376,9 +367,8 @@ int execute(char* sentence, int errorMode, int* returnCode, int doPipe) {
 		execute(sub_sentence, errorMode, returnCode, doPipe);
 
 		//Appel récursif des autres instructions s'il y en a
-		if(i + 1 < strlen(sentence)) {
-			execute(sentence+i+1, errorMode, returnCode, doPipe);
-		}
+		if(i + 1 < strlen(sentence))
+			execute(sentence + i + 1, errorMode, returnCode, doPipe);
 	} else { //On cherche les caractères correspondant aux opérations qu'on traite à part
 		char arg1[100], arg2[100];
 		int op = testMethod(sentence, arg1, arg2);
@@ -395,23 +385,25 @@ int execute(char* sentence, int errorMode, int* returnCode, int doPipe) {
 	return 0;
 }
 
-int getInstruction(char* sentence, int readLineMode, void* handle) {
+int getInstruction(char* sentence, char prompt[MAX_PROMPT_LENGTH], int readLineMode, void* handle) {
 	char* endOfLine = NULL;
-	char* (*readFonction)(char*);
-	void* (*addHistory)(char*);
+	char *line;
+	promptString(prompt);
 
-	if(readLineMode) {
-		readFonction = dlsym(handle, "readLine");
-		addHistory = dlsym(handle, "add_history");
+	if(!readLineMode) {
+		if(isatty(fileno(stdin)))
+			printf("%s", (const char*)prompt);
 
-		if((sentence = readFonction("")))
-			addHistory(sentence);
-
-		dlclose(handle);
-	} else if(fgets(sentence, MAX_INSTRUCTION_LENGTH, stdin) != NULL) {
-		if((endOfLine = strchr(sentence, '\n')) != NULL)
-			*endOfLine = '\0';
-	}
+		if(fgets(sentence, MAX_INSTRUCTION_LENGTH, stdin) != NULL) {
+			if((endOfLine = strchr(sentence, '\n')) != NULL)
+				*endOfLine = '\0';
+		}
+	} else if((line = readline((const char*)prompt))) {
+		if(line && *line) {
+			add_history(line);
+			strcpy(sentence, line);
+		}
+	} else return 1;
 
 	if(feof(stdin))
 		return 1;
@@ -419,97 +411,104 @@ int getInstruction(char* sentence, int readLineMode, void* handle) {
 	return 0;
 }
 
-int readFromFile(int argc, char** argv, int count, int posErrorMode, int status, int errorMode, int* returnCode) {
-	if(argc - count == 2) {
-		FILE* file = NULL;
-		char *endOfLine = NULL;
-		int filePos = 1;
+int readFromFile(int argc, char* fileName, int posErrorMode, int status, int errorMode, int* returnCode) {
+	FILE* file = fopen(fileName, "r");
+	char *endOfLine = NULL;
+	char* line = malloc(MAX_LINE_LENGTH * sizeof(char));
 
-		char* line = malloc(MAX_LINE_LENGTH * sizeof(char));
+	if(file != NULL) {
+		while(fgets(line, MAX_LINE_LENGTH, file) != NULL && (!status || (status == 10 && !errorMode))) {
+			if((endOfLine = strchr(line, '\n')) != NULL)
+				*endOfLine = '\0';
 
-		if(argc != 2 && posErrorMode == 1)
-			filePos = 2;
+			status = execute(line, errorMode, returnCode, 1);
+		}
 
-		file = fopen(argv[filePos], "r");
+		if(strcmp(line, "") != 0)
+			free(line);
 
-		if(file != NULL) {
-			while(fgets(line, MAX_LINE_LENGTH, file) != NULL && (!status || (status == 10 && !errorMode))) {
-				if((endOfLine = strchr(line, '\n')) != NULL)
-					*endOfLine = '\0';
+		fclose(file);
+	} else printf("Impossible d'ouvrir le fichier %s", fileName);
 
-				status = execute(line, errorMode, returnCode, 1);
-			}
+	return 1;
+}
 
-			if(strcmp(line, "") != 0)
-				free(line);
+void promptString(char prompt[MAX_PROMPT_LENGTH]) {
+	char host[MAX_HOST_LENGTH];
+	char path[MAX_PATH_LENGTH];
+	gethostname(host, MAX_HOST_LENGTH);
+	getcwd(path, sizeof(path));
 
-			fclose(file);
-		} else printf("Impossible d'ouvrir le fichier %s", argv[filePos]);
-
-		return 1;
-	}
-
-	return 0;
+	strcpy(prompt, getenv("USER"));
+	strcat(prompt, "@");
+	strcat(prompt, host);
+	strcat(prompt, ":");
+	strcat(prompt, path);
+	strcat(prompt, "$ ");
 }
 
 int main(int argc, char** argv) {
-	int sentenceSize = MAX_INSTRUCTION_LENGTH * sizeof(char);
-	char* sentence = malloc(sentenceSize);
-	const char* user = getenv("USER");
-	char host[MAX_HOST_LENGTH];
-	char path[MAX_PATH_LENGTH];
-	void *handle;
-	char *error;
+	char* sentence = malloc(MAX_INSTRUCTION_LENGTH * sizeof(char));
+	char prompt[MAX_PROMPT_LENGTH];
+	void* handle;
 	int errorMode = 0;
 	int readLineMode = 0;
 	int status = 0;
-	int count = 0;
 	int posErrorMode = 0;
 	int returnCode = 1;
-
-	gethostname(host, MAX_HOST_LENGTH);
+	int filePos = 0;
 
 	if(argc > 1) {
 		for(int i = 1; i < argc; i++) {
-			if(strcmp(argv[i], "-e") == 0) {
+			const int compError = strcmp(argv[i], "-e");
+			const int compRead = strcmp(argv[i], "-r");
+
+			if(compError == 0) {
 				errorMode = 1;
 				posErrorMode = i;
-				count++;
 			}
 
-			if(strcmp(argv[i], "-r") == 0) {
-				if(!(handle = dlopen("libreadline.so", RTLD_LAZY | RTLD_LOCAL))) {
-					fputs(dlerror(), stderr);
+			if(compRead == 0) {
+				handle = dlopen("libreadline.so", RTLD_LAZY);
+
+				if(handle == NULL)
+					handle = dlopen("libreadline.so.6", RTLD_LAZY);
+				else if(handle == NULL)
+					handle = dlopen("libreadline.so.5", RTLD_LAZY);
+
+				if (dlerror() != NULL)  {
+					printf("%s\n", dlerror());
 					status = 1;
 				}
 
-				if ((error = dlerror()) != NULL)  {
-					fputs(error, stderr);
-					status = 1;
-				}
+				readline = (readline_t)dlsym(handle, "readline");
+				add_history = (add_history_t)dlsym(handle, "add_history");
 
 				readLineMode = 1;
-				count++;
 			}
+
+			if(*argv[i] != '-')
+				filePos = i;
+			else if(compError != 0 && compRead != 0)
+				printf("Option %d non reconnue\n", i);
 		}
 
-		status = readFromFile(argc, argv, count, posErrorMode, status, errorMode, &returnCode);
+		if(filePos)
+			status = readFromFile(argc, argv[filePos], posErrorMode, status, errorMode, &returnCode);
 	}
 
 	while(!status || (status == 10 && !errorMode)) {
-		getcwd(path, sizeof(path));
-
-		if(isatty(fileno(stdin)))
-			printf("%s@%s:%s$ ", user, host, path);
-
 		memset(sentence, 0, MAX_INSTRUCTION_LENGTH * sizeof(char));
-		status = getInstruction(sentence, readLineMode, handle);
+		status = getInstruction(sentence, prompt, readLineMode, handle);
 
 		if(strlen(sentence) != 0) {
 			returnCode = 1;
 			status = execute(sentence, errorMode, &returnCode, 1);
 		}
 	}
+
+	if(readLineMode)
+		dlclose(handle);
 
 	if(sentence)
 		free(sentence);
