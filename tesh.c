@@ -26,9 +26,6 @@ char* operations[] = {"<", ">", ">>", "&&", "||", "|", "&"};
 int (*builtin_func[])(char**, int) = {&cdFonction, &exitFonction, &fgFonction};
 int (*logicalsAndPipe_func[])(char*, char*, int, int*) = {&executeIfFirstSucceeds, &logicalOr, &pipeOperation, &bgOperation};
 
-pid_t childPid = 0;
-int childReturn;
-
 int nbBuiltins() {
 	return sizeof(builtin) / sizeof(char*);
 }
@@ -53,21 +50,6 @@ int cdFonction(char** args, int errorMode) {
 
 int exitFonction(char** args, int errorMode) {
 	return 1;
-}
-
-int fgFonction(char** args, int pid) {
-	int status;
-
-	if(pid == 0)
-		fprintf(stderr, "No child process");
-	else {
-		kill(pid, SIGKILL);
-
-		while((pid = wait(&status)) != -1)
-			fprintf(stderr, "[%d] -> %d\n", pid, WEXITSTATUS(status));
-	}
-
-	return 0;
 }
 
 // < > >>
@@ -123,40 +105,33 @@ int readOrCreateFile(char* symbol, char* args1, char* args2, int errorMode, int*
 
 // |
 int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
-	pid_t pid1, pid2;
 	int fd[2];
-
+	pid_t pid;
 	pipe(fd);
 
-	if((pid1 = fork()) < 0) {
+	if((pid = fork()) < 0) {
 		if(errorMode)
 			return errno;
-		else perror("fork 1 failed");
-	} else if(pid1 == 0) {
-		dup2(fd[1], 1);
-		close(fd[0]);
-		execute(args1, errorMode, returnCode, 0);
+		else perror("fork failed");
 	}
 
-	if((pid2 = fork()) < 0) {
-		if(errorMode)
-			return errno;
-		else perror("fork 2 failed");
-	} else if(pid2 == 0) {
-		char** tabSentence = parseSentence(args2);
-
-		dup2(fd[0], 0);
+	if(pid == 0) {
+		close(fd[0]);
+		dup2(fd[1], 1);
 		close(fd[1]);
+		execute(args1, errorMode, returnCode);
+
+		return errno;
+	} else {
+		close(fd[1]);
+		dup2(fd[0], 0);
+		close(fd[0]);
+		char** tabSentence = parseSentence(args2);
 		execvp(tabSentence[0], tabSentence);
 
-		if(errorMode)
-			return errno;
-		else fprintf(stderr, "failed to execute %s\n", tabSentence[0]);
+		return errno;
 	}
 	
-	close(fd[0]);
-	close(fd[1]);
-
 	wait(NULL);
 	wait(NULL);
 
@@ -183,29 +158,83 @@ int executeIfFirstSucceeds(char* args1, char* args2, int errorMode, int* returnC
 	else return 0;
 }
 
+pid_t childPid = -1;
+volatile int fgWait = 0;
+volatile int sigRace = 1;
+
+int fgFonction(char** args, int pid) {
+	int status;
+	pid_t waitPid;
+
+	if(args[1] != NULL) {
+		int pid2 = atoi(args[1]);
+		printf("args[1] %d\n", atoi(args[1]));
+		waitPid = waitpid(pid2, &status, WNOHANG | WUNTRACED | WCONTINUED);
+		//fprintf(stderr, "waitPid %d\n", waitPid);
+	} else {
+		waitPid = waitpid(WAIT_ANY, &status, WNOHANG | WUNTRACED | WCONTINUED);
+	}
+
+	if(waitPid == -1)
+		fprintf(stderr, "No child process\n");
+	else if(waitPid > 0) {
+		if(childPid == waitPid) {
+            childPid = -1;
+
+            fgWait = 0;
+        } else if(WIFEXITED(status)) {
+			if(sigRace)
+				sigRace = 0;
+
+			printf("[%d->%d]\n", waitPid, WEXITSTATUS(status));
+
+
+
+			return 0;
+        }
+					if(WIFSIGNALED(status)) {
+				printf("[%d] Terminated (Signal: %d)\n", pid, WTERMSIG(status));
+				return 0;
+			}
+
+			if(WIFSTOPPED(status)) {
+				printf("[%d] Stopped (Signal: %d)\n", pid, WSTOPSIG(status));
+				return 0;
+			}
+	}
+
+	return 0;
+}
+
+void intstpSignalHandler(int signum) {
+    if(childPid != -1)
+        kill(childPid, signum);
+}
+
 //Fonction &
 int bgOperation(char* args1, char* args2, int errorMode, int* returnCode) {
 	pid_t pid;
+	sigRace = 1;
+
+	signal(SIGINT, intstpSignalHandler);
+    signal(SIGTSTP, intstpSignalHandler);
+    //signal(SIGCHLD, childSignalHandler);
 
 	if((pid = fork()) < 0) {
 		if(errorMode)
 			return errno;
 		else perror("fork failed");
 	} else if(pid == 0) {
-		//setpgid(0, 0);
+		char** tabSentence = parseSentence(args1);
 
+		if(strcmp(tabSentence[0], "true") != 0)
+			execvp(tabSentence[0], tabSentence);
+	} else {
+		sigRace = 0;
 
-		if(strcmp(args1, "false") == 0 || strcmp(args1, "true") == 0)
-			childReturn = 0;
-		/*else {
-			childReturn = execute(args1, errorMode, returnCode, 0);
-
-			if(errorMode)
-				return errno;
-			else fprintf(stderr, "failed to execute %s\n", args1);
-		}*/
+		printf("[%d]\n", pid);
 	}
-	fprintf(stderr, "[%d]\n", pid);
+
 	return 0;
 }
 
@@ -292,13 +321,9 @@ int analyseInstruction(char* sentence, int errorMode, int* returnCode, int doPip
 	tabSentence = parseSentence(sentence);
 
 	//On cherche les fonctions builtin
-	for(int i = 0; i < nbBuiltins(); i++) {
-		if(strcmp(tabSentence[0], builtin[i]) == 0) {
-			if(i == 2)
-				return (*builtin_func[i])(tabSentence, childPid);
+	for(int i = 0; i < nbBuiltins(); i++)
+		if(strcmp(tabSentence[0], builtin[i]) == 0)
 			return (*builtin_func[i])(tabSentence, errorMode);
-		}
-	}
 
 	//printf("tabSentence[0]: %s\n", tabSentence[0]);
 
