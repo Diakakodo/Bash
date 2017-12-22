@@ -119,7 +119,7 @@ int pipeOperation(char* args1, char* args2, int errorMode, int* returnCode) {
 		close(fd[0]);
 		dup2(fd[1], 1);
 		close(fd[1]);
-		execute(args1, errorMode, returnCode);
+		execute(args1, errorMode, returnCode, 0);
 
 		return errno;
 	} else {
