@@ -1,9 +1,0 @@
-& (commande en arrière plan)
-
-< > >>
-|
-||
-&&
-
-A FAIRE : if ' ' -> while ' '
-et      : occurences char -> char*
