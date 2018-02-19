@@ -1,1 +1,1 @@
-Reproduction d'un bash avec les commandes demandÃ©es dans le sujet
+Reproduction d'un bash avec les commandes demandées dans le sujet.
