@@ -1,1 +1,1 @@
-dépôt-template pour le projet RS 2017
+Reproduction d'un bash avec les commandes demandÃ©es dans le sujet
